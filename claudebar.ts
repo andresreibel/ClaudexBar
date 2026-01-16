@@ -29,6 +29,15 @@ function formatCountdown(resetAt: string): string {
   return h > 24 ? `${Math.floor(h / 24)}d${h % 24}h` : `${h}h${String(m).padStart(2, "0")}m`;
 }
 
+function calcPacing(usagePct: number, resetAt: string, windowMs: number): { icon: string; status: string } {
+  const msLeft = new Date(resetAt).getTime() - Date.now();
+  const timeElapsedPct = ((windowMs - msLeft) / windowMs) * 100;
+  const pacing = timeElapsedPct > 0 ? usagePct / timeElapsedPct : 0;
+  if (pacing > 1.2) return { icon: "↑", status: `${Math.round((pacing - 1) * 100)}% ahead` };
+  if (pacing < 0.8) return { icon: "↓", status: `${Math.round((1 - pacing) * 100)}% under` };
+  return { icon: "→", status: "on track" };
+}
+
 async function main() {
   const creds = JSON.parse(await readFile(CREDS_PATH, "utf-8"));
   const oauth = creds.claudeAiOauth;
@@ -64,36 +73,22 @@ async function main() {
   const sessionCountdown = formatCountdown(session.resets_at);
   const weeklyCountdown = formatCountdown(weekly.resets_at);
 
-  // Pacing: compare usage% vs time elapsed%
-  const msLeft = new Date(session.resets_at).getTime() - Date.now();
-  const sessionMs = 5 * 60 * 60 * 1000; // 5 hours
-  const timeElapsedPct = ((sessionMs - msLeft) / sessionMs) * 100;
-  const pacing = timeElapsedPct > 0 ? sessionPct / timeElapsedPct : 0;
-
-  // Pacing indicator: ↑ over, ↓ under, → on track
-  let pacingIcon = "→";
-  let pacingStatus = "on track";
-  if (pacing > 1.2) {
-    pacingIcon = "↑";
-    pacingStatus = `${Math.round((pacing - 1) * 100)}% ahead`;
-  } else if (pacing < 0.8) {
-    pacingIcon = "↓";
-    pacingStatus = `${Math.round((1 - pacing) * 100)}% under`;
-  }
+  const sessionPacing = calcPacing(sessionPct, session.resets_at, 5 * 60 * 60 * 1000);
+  const weeklyPacing = calcPacing(weeklyPct, weekly.resets_at, 7 * 24 * 60 * 60 * 1000);
 
   const maxPct = Math.max(sessionPct, weeklyPct);
   const cssClass = maxPct >= 90 ? "critical" : maxPct >= 75 ? "warning" : "";
 
   console.log(
     JSON.stringify({
-      text: `W${weeklyPct}% S${sessionPct}% ${pacingIcon} ${sessionCountdown}`,
+      text: `${sessionPacing.icon}S${sessionPct}% ${weeklyPacing.icon}W${weeklyPct}% ${sessionCountdown}`,
       tooltip: [
         "ClaudeBar",
         "─────────────────",
-        `Session: ${sessionPct}% (${pacingStatus})`,
+        `Session: ${sessionPct}% (${sessionPacing.status})`,
         `  Resets in ${sessionCountdown}`,
         "",
-        `Weekly: ${weeklyPct}%`,
+        `Weekly: ${weeklyPct}% (${weeklyPacing.status})`,
         `  Resets in ${weeklyCountdown}`,
       ].join("\n"),
       class: cssClass,
