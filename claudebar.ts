@@ -1,10 +1,7 @@
 #!/usr/bin/env bun
 /**
- * ClaudeBar - Claude Max usage meter for Waybar
- * https://github.com/andresreibel/claudebar
- *
- * Uses official Claude OAuth API for exact usage data.
- * Requires: bun, Claude CLI logged in (~/.claude/.credentials.json)
+ * ClaudeBar - Claude usage meter for Waybar
+ * Uses official Claude OAuth API for exact usage data
  */
 
 import { readFile } from "fs/promises";
@@ -84,7 +81,8 @@ async function main() {
     pacingStatus = `${Math.round((1 - pacing) * 100)}% under`;
   }
 
-  const cssClass = sessionPct > 80 ? "over" : sessionPct < 30 ? "under" : "normal";
+  const maxPct = Math.max(sessionPct, weeklyPct);
+  const cssClass = maxPct >= 90 ? "critical" : maxPct >= 75 ? "warning" : "";
 
   console.log(
     JSON.stringify({

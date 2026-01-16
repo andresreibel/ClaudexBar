@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_URL="https://raw.githubusercontent.com/andresreibel/claudebar/main/claudebar.ts"
-DEST="$HOME/.config/waybar/scripts/claudebar.ts"
+DEST="$HOME/.local/bin/claudebar.ts"
 
 echo "Installing ClaudeBar..."
 
@@ -21,7 +21,7 @@ echo ""
 echo '  "modules-right": ["custom/claudebar", ...],'
 echo ''
 echo '  "custom/claudebar": {'
-echo '    "exec": "bun ~/.config/waybar/scripts/claudebar.ts",'
+echo '    "exec": "~/.bun/bin/bun ~/.local/bin/claudebar.ts",'
 echo '    "interval": 60,'
 echo '    "return-type": "json",'
 echo '    "tooltip": true,'

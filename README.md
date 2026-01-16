@@ -25,7 +25,7 @@ omarchy-restart-waybar
 **Step 1:** Copy the script
 
 ```bash
-curl -o ~/.config/waybar/scripts/claudebar.ts \
+curl -o ~/.local/bin/claudebar.ts \
   https://raw.githubusercontent.com/andresreibel/claudebar/main/claudebar.ts
 ```
 
@@ -35,7 +35,7 @@ curl -o ~/.config/waybar/scripts/claudebar.ts \
 "modules-right": ["custom/claudebar", ...],
 
 "custom/claudebar": {
-  "exec": "bun ~/.config/waybar/scripts/claudebar.ts",
+  "exec": "~/.bun/bin/bun ~/.local/bin/claudebar.ts",
   "interval": 60,
   "return-type": "json",
   "tooltip": true,
@@ -86,9 +86,12 @@ W3% S3% ↓ 4h08m
 Add to `~/.config/waybar/style.css`:
 
 ```css
-#custom-claudebar.over  { color: #e06c75; }
-#custom-claudebar.under { color: #98c379; }
+#custom-claudebar.warning { color: #ff9e64; }
+#custom-claudebar.critical { color: #f7768e; }
 ```
+
+- **≥75%** → cosmic orange (warning)
+- **≥90%** → red (critical)
 
 ## Related
 
