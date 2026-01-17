@@ -53,12 +53,18 @@ killall waybar && waybar &
 ## What It Shows
 
 ```
-W3% S3% ↓ 4h08m
-│   │   │  └── Resets in 4h 8m
-│   │   └───── ↓ under / → on track / ↑ ahead
-│   └───────── Session: 3% of 5-hour window
-└───────────── Weekly: 3% of 7-day limit
+↓S8% ↓W27% 3h53m
+│ │   │ │   └── Session resets in 3h 53m
+│ │   │ └────── Weekly: 27% of 7-day limit
+│ │   └──────── Weekly pacing indicator
+│ └──────────── Session: 8% of 5-hour window
+└────────────── Session pacing indicator
 ```
+
+**Pacing indicators:**
+- `↓` — Using slower than expected (>5% under pace)
+- `→` — On track (within ±5% of expected)
+- `↑` — Using faster than expected (>5% ahead of pace)
 
 ## Requirements
 
