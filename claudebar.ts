@@ -32,13 +32,13 @@ function formatCountdown(resetAt: string): string {
   return h > 24 ? `${Math.floor(h / 24)}d${h % 24}h` : `${h}h${String(m).padStart(2, "0")}m`;
 }
 
-function calcPacing(usagePct: number, resetAt: string, windowMs: number): { icon: string; status: string } {
+function calcPacing(usagePct: number, resetAt: string, windowMs: number): { icon: string; status: string; devPct: number } {
   const msLeft = new Date(resetAt).getTime() - Date.now();
   const timeElapsedPct = ((windowMs - msLeft) / windowMs) * 100;
   const pacing = timeElapsedPct > 0 ? usagePct / timeElapsedPct : 0;
-  if (pacing > 1.05) return { icon: "↑", status: `${Math.round((pacing - 1) * 100)}% ahead` };
-  if (pacing < 0.95) return { icon: "↓", status: `${Math.round((1 - pacing) * 100)}% under` };
-  return { icon: "→", status: "on track" };
+  if (pacing > 1.05) { const d = Math.round((pacing - 1) * 100); return { icon: "↑", status: `${d}% ahead`, devPct: d }; }
+  if (pacing < 0.95) { const d = Math.round((1 - pacing) * 100); return { icon: "↓", status: `${d}% under`, devPct: -d }; }
+  return { icon: "→", status: "on track", devPct: 0 };
 }
 
 async function refreshToken(creds: any): Promise<boolean> {
@@ -116,12 +116,17 @@ async function main() {
   const sessionPacing = calcPacing(sessionPct, session.resets_at, 5 * 60 * 60 * 1000);
   const weeklyPacing = calcPacing(weeklyPct, weekly.resets_at, 7 * 24 * 60 * 60 * 1000);
 
-  const maxPct = Math.max(sessionPct, weeklyPct);
-  const cssClass = maxPct >= 90 ? "critical" : maxPct >= 75 ? "warning" : "";
+  const weeklyAhead = weeklyPacing.devPct;
+  const cssClass =
+    (weeklyAhead >= 25 || weeklyPct >= 90) ? "critical" :
+    (weeklyAhead >= 10 || weeklyPct >= 75) ? "warning" : "";
+
+  const sessionDev = Math.abs(sessionPacing.devPct);
+  const weeklyDev = Math.abs(weeklyPacing.devPct);
 
   console.log(
     JSON.stringify({
-      text: `${sessionPacing.icon}S${sessionPct}% ${weeklyPacing.icon}W${weeklyPct}% ${sessionCountdown}`,
+      text: `${sessionPacing.icon}S${sessionDev}% ${weeklyPacing.icon}W${weeklyDev}% ${sessionCountdown}`,
       tooltip: [
         "ClaudeBar",
         "─────────────────",
