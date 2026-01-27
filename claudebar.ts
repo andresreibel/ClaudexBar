@@ -126,7 +126,7 @@ async function main() {
 
   console.log(
     JSON.stringify({
-      text: `${sessionPacing.icon}S${sessionDev}% ${weeklyPacing.icon}W${weeklyDev}% ${sessionCountdown}`,
+      text: `${weeklyPacing.icon}W${weeklyDev}% ${weeklyCountdown}`,
       tooltip: [
         "ClaudeBar",
         "─────────────────",

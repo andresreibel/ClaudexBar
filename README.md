@@ -53,18 +53,13 @@ killall waybar && waybar &
 ## What It Shows
 
 ```
-↓S78% ↓W24% 3h26m
-│ │    │ │   └── Session resets in 3h 26m
-│ │    │ └────── Weekly: 24% under pace
-│ │    └──────── Weekly pacing indicator
-│ └───────────── Session: 78% under pace
-└─────────────── Session pacing indicator
+↓W24% 3h26m
+│ │   └──── Weekly resets in 3h 26m
+│ └─────── 24% under expected pace
+└───────── Pacing indicator (↓ under, → on track, ↑ ahead)
 ```
 
-**Pacing indicators:**
-- `↓` — Using slower than expected (>5% under pace)
-- `→` — On track (within ±5% of expected)
-- `↑` — Using faster than expected (>5% ahead of pace)
+Hover for session details.
 
 ## Requirements
 
@@ -76,7 +71,8 @@ killall waybar && waybar &
 
 - **No API keys** — Uses OAuth token from Claude CLI (`~/.claude/.credentials.json`)
 - **Official API** — Calls `api.anthropic.com/api/oauth/usage` for exact data
-- **Single file** — One 100-line TypeScript script, no dependencies beyond Bun
+- **Auto-refresh** — Refreshes OAuth token before expiry, no manual re-auth needed
+- **Single file** — One ~150-line TypeScript script, no dependencies beyond Bun
 - **Waybar native** — Outputs JSON that Waybar understands natively
 
 ## Troubleshooting
