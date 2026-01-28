@@ -32,13 +32,13 @@ function formatCountdown(resetAt: string): string {
   return h > 24 ? `${Math.floor(h / 24)}d${h % 24}h` : `${h}h${String(m).padStart(2, "0")}m`;
 }
 
-function calcPacing(usagePct: number, resetAt: string, windowMs: number): { icon: string; status: string; devPct: number } {
+function calcPacing(usagePct: number, resetAt: string, windowMs: number): { icon: string; status: string; devPct: number; timeElapsedPct: number } {
   const msLeft = new Date(resetAt).getTime() - Date.now();
-  const timeElapsedPct = ((windowMs - msLeft) / windowMs) * 100;
+  const timeElapsedPct = Math.round(((windowMs - msLeft) / windowMs) * 100);
   const pacing = timeElapsedPct > 0 ? usagePct / timeElapsedPct : 0;
-  if (pacing > 1.05) { const d = Math.round((pacing - 1) * 100); return { icon: "↑", status: `${d}% ahead`, devPct: d }; }
-  if (pacing < 0.95) { const d = Math.round((1 - pacing) * 100); return { icon: "↓", status: `${d}% under`, devPct: -d }; }
-  return { icon: "→", status: "on track", devPct: 0 };
+  if (pacing > 1.05) { const d = Math.round((pacing - 1) * 100); return { icon: "↑", status: `${d}% ahead`, devPct: d, timeElapsedPct }; }
+  if (pacing < 0.95) { const d = Math.round((1 - pacing) * 100); return { icon: "↓", status: `${d}% under`, devPct: -d, timeElapsedPct }; }
+  return { icon: "→", status: "on track", devPct: 0, timeElapsedPct };
 }
 
 async function refreshToken(creds: any): Promise<boolean> {
@@ -126,7 +126,7 @@ async function main() {
 
   console.log(
     JSON.stringify({
-      text: `${weeklyPacing.icon}W${weeklyDev}% ${weeklyCountdown}`,
+      text: `◉${weeklyPct}% ${weeklyPacing.icon} ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
       tooltip: [
         "ClaudeBar",
         "─────────────────",

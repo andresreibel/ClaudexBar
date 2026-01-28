@@ -54,10 +54,11 @@ killall waybar && waybar &
 
 **Bar:**
 ```
-↓W24% 3h26m
-│ │   └──── Weekly resets in 3h 26m
-│ └─────── 24% under expected pace
-└───────── Pacing indicator (↓ under, → on track, ↑ ahead)
+◉66% ↓ ⧖88% 19h47m
+ │   │  │   └────── Weekly resets in 19h 47m
+ │   │  └────────── 88% of weekly window elapsed
+ │   └───────────── Pacing (↓ under, → on track, ↑ ahead)
+ └───────────────── 66% of weekly limit used
 ```
 
 **Tooltip (hover):**
