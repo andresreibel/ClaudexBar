@@ -1,129 +1,129 @@
-# ClaudeBar
+# ClaudexBar
 
-> Your Claude Max usage, always visible. Never hit rate limits by surprise.
+Waybar usage module for Claude + Codex with one click-to-toggle provider.
 
-![ClaudeBar on Omarchy](screenshot-desktop.png)
+![ClaudexBar on Waybar](screenshot-desktop.png)
 
 <p align="center">
-  <img src="screenshot-tooltip.png" alt="ClaudeBar tooltip" width="360">
+  <img src="screenshot-tooltip.png" alt="ClaudexBar tooltip" width="360">
 </p>
 
-## Quick Install (Omarchy)
+## What it does
+
+- Shows usage in Waybar (`text`, `tooltip`, `class`).
+- Supports providers:
+  - `codex` (OAuth API with RPC fallback)
+  - `claude` (Anthropic OAuth usage API)
+- Prefixes provider badge in bar text:
+  - `A` for Claude
+  - `O` for Codex
+
+## Commands
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andresreibel/claudebar/main/install.sh | bash
+claudex                  # render payload for current provider
+claudex --toggle         # toggle provider: codex <-> claude
+claudex --provider claude
+claudex --provider codex
+
+cdx                      # interactive menu (from ~/.bashrc.d/claudexbar)
+cdxraw                   # raw JSON output
 ```
 
-Then add to your waybar config and restart:
+## Bash Integration
+
+If you use `~/.bashrc.d`, create `~/.bashrc.d/claudexbar`:
 
 ```bash
-omarchy-restart-waybar
-```
+claudex() {
+  ~/.bun/bin/bun ~/.local/bin/claudexbar.ts "$@"
+}
 
-## Manual Install
+cdxraw() {
+  claudex "$@"
+}
 
-**Step 1:** Copy the script
+cdxmenu() {
+  local state_dir="$HOME/.codex/claudexbar"
+  mkdir -p "$state_dir"
+  while true; do
+    local provider
+    provider="$(cat "$state_dir/provider" 2>/dev/null || echo codex)"
+    echo ""
+    echo "Claudex Menu"
+    echo "────────────"
+    echo "provider: $provider"
+    echo "1) toggle provider"
+    echo "2) provider -> claude"
+    echo "3) provider -> codex"
+    echo "q) quit"
+    read -rp "Select: " choice
+    case "$choice" in
+      1) claudex --toggle ;;
+      2) claudex --provider claude ;;
+      3) claudex --provider codex ;;
+      q|Q) break ;;
+      *) echo "Invalid choice" ;;
+    esac
+  done
+}
 
-```bash
-curl -o ~/.local/bin/claudebar.ts \
-  https://raw.githubusercontent.com/andresreibel/claudebar/main/claudebar.ts
-```
-
-**Step 2:** Add to `~/.config/waybar/config.jsonc`
-
-```jsonc
-"modules-right": ["custom/claudebar", ...],
-
-"custom/claudebar": {
-  "exec": "~/.bun/bin/bun ~/.local/bin/claudebar.ts",
-  "interval": 60,
-  "return-type": "json",
-  "tooltip": true,
-  "on-click": "xdg-open https://claude.ai/settings/usage"
+cdx() {
+  if [[ $# -eq 0 ]]; then
+    cdxmenu
+    return
+  fi
+  claudex "$@"
 }
 ```
 
-**Step 3:** Restart waybar
+Make sure your `~/.bashrc` sources `~/.bashrc.d/*`:
 
 ```bash
-killall waybar && waybar &
-# Or on Omarchy: omarchy-restart-waybar
+for file in ~/.bashrc.d/*; do
+  [[ -f "$file" ]] && source "$file"
+done
 ```
 
-## What It Shows
+Optional: if you use `buomarchy`, sync ClaudexBar into both backup and repo paths:
 
-**Bar:**
-```
-◉66% ↘ ⧖88% 19h47m
- │   │  │   └────── Weekly resets in 19h 47m
- │   │  └────────── 88% of weekly window elapsed
- │   └───────────── Pacing: ↑ well ahead, ↗ slightly ahead, → on track, ↘ slightly under, ↓ well under
- └───────────────── 66% of weekly limit used
+```bash
+cp "$HOME/.local/bin/claudexbar.ts" "$HOME/omarchy-sync/scripts/claudexbar.ts"
+cp "$HOME/.local/bin/claudexbar.ts" "$HOME/Code/claudexbar/claudexbar.ts"
 ```
 
-**Tooltip (hover):**
-```
-Session: 7% (63% under)
-         │   └─────────── 63% under expected pace for this session
-         └────────────── 7% of session limit used
+If your repo folder uses different casing, set it explicitly:
 
-Weekly: 55% (27% under)
-        │    └────────── 27% under expected pace for the week
-        └─────────────── 55% of weekly limit used
+```bash
+export CLAUDEXBAR_REPO_DIR="$HOME/Code/claudexbar"
 ```
 
-Pacing compares your actual usage to where you'd be if spending evenly across the period.
+## Waybar snippet
+
+```jsonc
+"custom/claudexbar": {
+  "exec": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts",
+  "interval": 60,
+  "return-type": "json",
+  "tooltip": true,
+  "signal": 11,
+  "on-click": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts --toggle && pkill -RTMIN+11 waybar"
+}
+```
+
+## State files
+
+- `~/.codex/claudexbar/provider`
 
 ## Requirements
 
-- [Bun](https://bun.sh/) — `curl -fsSL https://bun.sh/install | bash`
-- [Claude CLI](https://github.com/anthropics/claude-code) — must be logged in
-- Claude Max subscription
+- Bun installed (`~/.bun/bin/bun` in snippets above).
+- Waybar with `custom/claudexbar` module enabled.
+- Logged in CLIs:
+  - `codex login`
+  - `claude` (for Claude provider usage)
 
-## Why This Approach?
+## Security
 
-- **No API keys** — Uses OAuth token from Claude CLI (`~/.claude/.credentials.json`)
-- **Official API** — Calls `api.anthropic.com/api/oauth/usage` for exact data
-- **Auto-refresh** — Refreshes OAuth token before expiry, no manual re-auth needed
-- **Single file** — One ~150-line TypeScript script, no dependencies beyond Bun
-- **Waybar native** — Outputs JSON that Waybar understands natively
-
-## Troubleshooting
-
-| Shows | Fix |
-|-------|-----|
-| `⚠ auth` | Run `claude` to log in |
-| `⚠ exp` | Run `claude` to refresh token |
-| `⚠ err` | Check network connection |
-
-## Color Coding (Optional)
-
-Add to `~/.config/waybar/style.css`:
-
-```css
-#custom-claudebar.easy { color: #e0af68; }
-#custom-claudebar.warning { color: #ff9e64; }
-#custom-claudebar.critical { color: #f7768e; }
-```
-
-| Color | Class | When |
-|-------|-------|------|
-| White | (default) | On track or well under pace |
-| Gold | `easy` | Slightly under pace (0.90–0.95x) — coasting |
-| Orange | `warning` | Slightly ahead (>1.05x pace) or ≥75% used |
-| Red | `critical` | Well ahead (>1.10x pace) or ≥90% used |
-
-## Related
-
-- [Waybar](https://github.com/Alexays/Waybar) — Highly customizable status bar for Wayland
-- [CodexBar](https://github.com/steipete/CodexBar) — Usage meter for macOS (inspiration)
-- [Omarchy](https://omarchy.org/) — Beautiful Linux with Hyprland
-
-## Thanks
-
-- [Peter Steinberger](https://github.com/steipete) — CodexBar inspiration
-- [DHH](https://github.com/dhh) — Omarchy & O'Saasy license
-
-## License
-
-[O'Saasy](https://osaasy.dev/)
+- No machine-specific secrets are stored in this repo.
+- Runtime auth is read from local CLI credential files (`~/.codex/auth.json`, `~/.claude/.credentials.json`), which are not tracked in git.
