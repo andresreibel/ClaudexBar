@@ -2,10 +2,10 @@
 
 Waybar usage module for Claude + Codex with one click-to-toggle provider.
 
-![ClaudexBar on Waybar](screenshot-desktop.png)
+![ClaudexBar on Waybar](screenshot-2026-02-17_00-41-59.png)
 
 <p align="center">
-  <img src="screenshot-tooltip.png" alt="ClaudexBar tooltip" width="360">
+  <img src="screenshot-2026-02-17_00-42-11.png" alt="ClaudexBar tooltip (Claude provider)" width="360">
 </p>
 
 ## What it does
