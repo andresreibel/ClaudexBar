@@ -10,21 +10,49 @@ Waybar usage module for Claude + Codex with one click-to-toggle provider.
 
 ## What it does
 
-- Shows usage in Waybar (`text`, `tooltip`, `class`).
+- Outputs a Waybar-friendly JSON payload (`text`, `tooltip`, `class`, `percentage`).
 - Supports providers:
-  - `codex` (OAuth API with RPC fallback)
-  - `claude` (Anthropic OAuth usage API)
+  - `codex` (ChatGPT OAuth usage endpoint with `codex app-server` RPC fallback)
+  - `claude` (Anthropic OAuth usage endpoint with automatic token refresh)
 - Prefixes provider badge in bar text:
   - `A` for Claude
   - `O` for Codex
 
+## How it works
+
+### Provider selection
+
+- Provider state lives in `~/.codex/claudexbar/provider` (defaults to `codex`).
+- `--toggle` flips `codex` <-> `claude`.
+- `--provider <name>` sets it explicitly.
+- After changing provider, the script triggers a Waybar refresh via `pkill -RTMIN+11 waybar` (so your module updates immediately).
+
+### Data sources
+
+**Codex provider**
+- Reads auth from `~/.codex/auth.json` (created by `codex login`).
+- Primary path: calls the ChatGPT usage endpoint (`/wham/usage` on `chatgpt_base_url`).
+- Base URL comes from `~/.codex/config.toml` (`chatgpt_base_url`), defaulting to `https://chatgpt.com/backend-api`.
+- Fallback path: spawns `codex -s read-only -a untrusted app-server` and reads rate limits over RPC.
+
+**Claude provider**
+- Reads OAuth creds from `~/.claude/.credentials.json` (created by the `claude` CLI).
+- If the token is near expiry, refreshes it via Anthropic OAuth.
+- Calls `https://api.anthropic.com/api/oauth/usage` to get 5-hour + 7-day utilization windows.
+
+### What you see in the bar
+
+- The arrow (`↑ ↗ → ↘ ↓`) is a simple pace signal: usage vs time elapsed in the current window.
+- The text shows weekly utilization plus a countdown to the next reset.
+- The JSON `class` includes `easy`, `warning`, or `critical` (based on weekly pace/percent) and also a provider class (`provider-codex` or `provider-claude`).
+
 ## Commands
 
 ```bash
-claudex                  # render payload for current provider
-claudex --toggle         # toggle provider: codex <-> claude
-claudex --provider claude
-claudex --provider codex
+claudex                  # render Waybar JSON payload for current provider
+claudex --toggle         # toggle provider: codex <-> claude (prints new provider)
+claudex --provider claude # set provider (prints provider)
+claudex --provider codex  # set provider (prints provider)
 
 cdx                      # interactive menu (from ~/.bashrc.d/claudexbar)
 cdxraw                   # raw JSON output
@@ -85,17 +113,11 @@ for file in ~/.bashrc.d/*; do
 done
 ```
 
-Optional: if you use `buomarchy`, sync ClaudexBar into both backup and repo paths:
+Optional: keep a backup copy and the repo copy in sync:
 
 ```bash
 cp "$HOME/.local/bin/claudexbar.ts" "$HOME/omarchy-sync/scripts/claudexbar.ts"
 cp "$HOME/.local/bin/claudexbar.ts" "$HOME/Code/claudexbar/claudexbar.ts"
-```
-
-If your repo folder uses different casing, set it explicitly:
-
-```bash
-export CLAUDEXBAR_REPO_DIR="$HOME/Code/claudexbar"
 ```
 
 ## Waybar snippet
@@ -127,3 +149,4 @@ export CLAUDEXBAR_REPO_DIR="$HOME/Code/claudexbar"
 
 - No machine-specific secrets are stored in this repo.
 - Runtime auth is read from local CLI credential files (`~/.codex/auth.json`, `~/.claude/.credentials.json`), which are not tracked in git.
+- The script may update those files when refreshing OAuth tokens.
