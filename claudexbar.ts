@@ -287,9 +287,6 @@ function deriveCssClass(weeklyPct: number, weeklyPacing: Pacing): string {
     if (pace > 1.05 || weeklyPct >= 75) {
         return "warning";
     }
-    if (pace < 0.95 && pace >= 0.90) {
-        return "easy";
-    }
     return "";
 }
 

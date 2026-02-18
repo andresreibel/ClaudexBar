@@ -44,7 +44,11 @@ Waybar usage module for Claude + Codex with one click-to-toggle provider.
 
 - The arrow (`↑ ↗ → ↘ ↓`) is a simple pace signal: usage vs time elapsed in the current window.
 - The text shows weekly utilization plus a countdown to the next reset.
-- The JSON `class` includes `easy`, `warning`, or `critical` (based on weekly pace/percent) and also a provider class (`provider-codex` or `provider-claude`).
+- The JSON `class` always includes a provider class (`provider-codex` or `provider-claude`).
+- Usage color classes:
+  - `warning` when weekly usage is `>= 75%` or pace is `> 1.05`
+  - `critical` when weekly usage is `>= 90%` or pace is `> 1.10`
+  - otherwise no usage class (neutral color, even if pace is slightly behind like `↘`)
 
 ## Commands
 
