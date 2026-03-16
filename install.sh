@@ -164,7 +164,7 @@ install_waybar_integration() {
       /^[[:space:]]*}[[:space:]]*$/ && inserted_block == 0 {
         print "  ,\"custom/claudexbar\": {"
         print "    \"exec\": \"~/.bun/bin/bun ~/.local/bin/claudexbar.ts\","
-        print "    \"interval\": 60,"
+        print "    \"interval\": 300,"
         print "    \"return-type\": \"json\","
         print "    \"tooltip\": true,"
         print "    \"signal\": 11,"

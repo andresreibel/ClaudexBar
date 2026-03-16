@@ -39,6 +39,7 @@ Waybar usage module for Claude + Codex with one click-to-toggle provider.
 - Reads OAuth creds from `~/.claude/.credentials.json` (created by the `claude` CLI).
 - If the token is near expiry, refreshes it via Anthropic OAuth.
 - Calls `https://api.anthropic.com/api/oauth/usage` to get 5-hour + 7-day utilization windows.
+- Caches the last good Claude payload and reuses it during temporary API failures or `429` backoff windows.
 
 ### What you see in the bar
 
@@ -129,7 +130,7 @@ cp "$HOME/.local/bin/claudexbar.ts" "$HOME/Code/claudexbar/claudexbar.ts"
 ```jsonc
 "custom/claudexbar": {
   "exec": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts",
-  "interval": 60,
+  "interval": 300,
   "return-type": "json",
   "tooltip": true,
   "signal": 11,
@@ -140,6 +141,8 @@ cp "$HOME/.local/bin/claudexbar.ts" "$HOME/Code/claudexbar/claudexbar.ts"
 ## State files
 
 - `~/.codex/claudexbar/provider`
+- `~/.codex/claudexbar/claude-last-good.json`
+- `~/.codex/claudexbar/claude-backoff.json`
 
 ## Requirements
 

@@ -19,6 +19,9 @@ const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CLAUDE_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+const CLAUDE_CACHE_PATH = `${STATE_DIR}/claude-last-good.json`;
+const CLAUDE_BACKOFF_PATH = `${STATE_DIR}/claude-backoff.json`;
+const CLAUDE_MIN_BACKOFF_MS = 15 * 60 * 1000;
 
 type Provider = typeof CLAUDE_PROVIDER | typeof CODEX_PROVIDER;
 
@@ -38,6 +41,16 @@ type SpawnResult = {
     stdout: string;
     stderr: string;
     code: number;
+};
+
+type ClaudeCachedPayload = {
+    savedAtMs: number;
+    payload: WaybarPayload;
+};
+
+type ClaudeBackoffState = {
+    retryAtMs: number;
+    reason: string;
 };
 
 type Pacing = {
@@ -151,6 +164,94 @@ async function writeProvider(provider: Provider): Promise<void> {
     await writeFile(PROVIDER_STATE_PATH, provider + "\n", "utf8");
 }
 
+async function readJsonFile(path: string): Promise<unknown | null> {
+    try {
+        return JSON.parse(await readFile(path, "utf8"));
+    } catch {
+        return null;
+    }
+}
+
+async function writeJsonFile(path: string, value: unknown): Promise<void> {
+    await ensureStateDir();
+    await writeFile(path, JSON.stringify(value, null, 2), "utf8");
+}
+
+function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const text = toStringValue(value.text);
+    const tooltip = toStringValue(value.tooltip);
+    if (!text || !tooltip) {
+        return null;
+    }
+
+    let cssClass: string | string[] | undefined;
+    if (typeof value.class == "string") {
+        cssClass = value.class;
+    } else if (Array.isArray(value.class) && value.class.every((entry) => typeof entry == "string")) {
+        cssClass = value.class;
+    }
+
+    const percentage = toNumber(value.percentage) ?? undefined;
+    return {
+        text,
+        tooltip,
+        class: cssClass,
+        percentage,
+    };
+}
+
+async function loadClaudeCachedPayload(): Promise<ClaudeCachedPayload | null> {
+    const parsed = await readJsonFile(CLAUDE_CACHE_PATH);
+    if (!isRecord(parsed)) {
+        return null;
+    }
+
+    const savedAtMs = toNumber(parsed.savedAtMs);
+    const payload = normalizeWaybarPayload(parsed.payload);
+    if (savedAtMs == null || !payload) {
+        return null;
+    }
+
+    return { savedAtMs, payload };
+}
+
+async function saveClaudeCachedPayload(payload: WaybarPayload): Promise<void> {
+    await writeJsonFile(CLAUDE_CACHE_PATH, {
+        savedAtMs: Date.now(),
+        payload,
+    });
+}
+
+async function loadClaudeBackoff(): Promise<ClaudeBackoffState | null> {
+    const parsed = await readJsonFile(CLAUDE_BACKOFF_PATH);
+    if (!isRecord(parsed)) {
+        return null;
+    }
+
+    const retryAtMs = toNumber(parsed.retryAtMs);
+    const reason = toStringValue(parsed.reason) ?? "Rate limited. Please try again later.";
+    if (retryAtMs == null || retryAtMs <= Date.now()) {
+        return null;
+    }
+
+    return { retryAtMs, reason };
+}
+
+async function saveClaudeBackoff(state: ClaudeBackoffState): Promise<void> {
+    await writeJsonFile(CLAUDE_BACKOFF_PATH, state);
+}
+
+async function clearClaudeBackoff(): Promise<void> {
+    await saveClaudeBackoff({
+        retryAtMs: 0,
+        reason: "",
+    });
+}
+
 function nextProvider(provider: Provider): Provider {
     return provider == CODEX_PROVIDER ? CLAUDE_PROVIDER : CODEX_PROVIDER;
 }
@@ -211,6 +312,45 @@ function mergeClasses(...values: Array<string | string[] | undefined>): string[]
     }
 
     return merged.length > 0 ? merged : undefined;
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+    if (!value) {
+        return null;
+    }
+
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+        return seconds * 1000;
+    }
+
+    const retryAtMs = Date.parse(value);
+    if (Number.isFinite(retryAtMs)) {
+        return Math.max(0, retryAtMs - Date.now());
+    }
+
+    return null;
+}
+
+function formatLocalDateTime(ms: number): string {
+    return new Date(ms).toLocaleString();
+}
+
+function annotateCachedClaudePayload(payload: WaybarPayload, detail: string): WaybarPayload {
+    return {
+        ...payload,
+        tooltip: `${payload.tooltip}\n\nCached Claude usage\n${detail}`,
+        class: mergeClasses(payload.class, "stale", "provider-claude"),
+    };
+}
+
+async function fallbackToCachedClaudePayload(detail: string): Promise<WaybarPayload | null> {
+    const cached = await loadClaudeCachedPayload();
+    if (!cached) {
+        return null;
+    }
+
+    return annotateCachedClaudePayload(cached.payload, detail);
 }
 
 function addProviderBadge(text: string, badge: "A" | "O"): string {
@@ -800,7 +940,31 @@ function parseEpochSecondsFromIso(value: string | null): number | null {
     return Math.round(ms / 1000);
 }
 
+async function readClaudeErrorMessage(response: Response): Promise<string | null> {
+    try {
+        const body = await response.json();
+        if (!isRecord(body)) {
+            return null;
+        }
+
+        const error = readNestedRecord(body, "error");
+        return toStringValue(error?.message) ?? toStringValue(body.message);
+    } catch {
+        return null;
+    }
+}
+
 async function fetchClaudePayload(): Promise<WaybarPayload> {
+    const activeBackoff = await loadClaudeBackoff();
+    if (activeBackoff) {
+        const cached = await fallbackToCachedClaudePayload(
+            `Live refresh after ${formatLocalDateTime(activeBackoff.retryAtMs)}\nReason: ${activeBackoff.reason}`,
+        );
+        if (cached) {
+            return cached;
+        }
+    }
+
     const loaded = await loadClaudeOAuth();
     const auth = await maybeRefreshClaudeToken(loaded);
 
@@ -811,8 +975,28 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
         },
     });
 
+    if (response.status == 429) {
+        const reason = await readClaudeErrorMessage(response) ?? "Rate limited. Please try again later.";
+        const retryAfterMs = Math.max(parseRetryAfterMs(response.headers.get("retry-after")) ?? 0, CLAUDE_MIN_BACKOFF_MS);
+        const backoff = {
+            retryAtMs: Date.now() + retryAfterMs,
+            reason,
+        };
+        await saveClaudeBackoff(backoff);
+
+        const cached = await fallbackToCachedClaudePayload(
+            `Live refresh after ${formatLocalDateTime(backoff.retryAtMs)}\nReason: ${reason}`,
+        );
+        if (cached) {
+            return cached;
+        }
+
+        throw new Error(`Claude usage API 429: ${reason}`);
+    }
+
     if (!response.ok) {
-        throw new Error(`Claude usage API ${response.status}`);
+        const message = await readClaudeErrorMessage(response);
+        throw new Error(message ? `Claude usage API ${response.status}: ${message}` : `Claude usage API ${response.status}`);
     }
 
     const body = await response.json();
@@ -847,7 +1031,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
     const sessionCountdown = formatCountdown(sessionResetAt);
     const weeklyCountdown = formatCountdown(weeklyResetAt);
 
-    return {
+    const payload = {
         text: addProviderBadge(
             `${weeklyPacing.icon} ◉${weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
             "A"),
@@ -865,6 +1049,10 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
         class: mergeClasses(cssClass, "provider-claude"),
         percentage: sessionPct,
     };
+
+    await saveClaudeCachedPayload(payload);
+    await clearClaudeBackoff();
+    return payload;
 }
 
 function errorPayload(message: string): WaybarPayload {
@@ -881,6 +1069,10 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
             return await fetchClaudePayload();
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            const cached = await fallbackToCachedClaudePayload(`Live fetch failed: ${message}`);
+            if (cached) {
+                return cached;
+            }
             return errorPayload(`Claude failed: ${message}`);
         }
     }
