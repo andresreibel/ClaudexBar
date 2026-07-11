@@ -3,13 +3,15 @@ import Testing
 @testable import ClaudexBarCore
 
 @Test func decodesWaybarStringClass() throws {
-    let data = Data(#"{"text":"O(1) → 42%","tooltip":"Codex","class":"warning provider-codex","percentage":12,"resetCredits":1}"#.utf8)
+    let data = Data(#"{"text":"O(1) → 42%","tooltip":"Codex","class":"warning provider-codex","percentage":12,"resetCredits":1,"updatedAt":"2026-07-11T08:10:00.000Z"}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
     #expect(payload.text == "O(1) → 42%")
     #expect(payload.classes == ["warning", "provider-codex"])
     #expect(payload.percentage == 12)
     #expect(payload.resetCredits == 1)
+    #expect(payload.updatedAt == "2026-07-11T08:10:00.000Z")
+    #expect(payload.updatedTimeText != nil)
     #expect(payload.severity == .warning)
 }
 
@@ -44,7 +46,7 @@ import Testing
 @Test func removesDuplicatedHeaderFromMacOSDetailOnly() {
     let payload = ClaudexBarPayload(
         text: "O(1)",
-        tooltip: "ClaudexBar\n-----------\nProvider: Codex (oauth)\n\nSession: 1%\n\nFree reset credits: 1"
+        tooltip: "ClaudexBar\n-----------\nProvider: Codex (oauth)\n\nSession: 1%\n\nFree reset credits: 1\n\nUpdated: 15:10"
     )
 
     #expect(payload.macOSDetail == "Provider: Codex (oauth)\n\nSession: 1%")

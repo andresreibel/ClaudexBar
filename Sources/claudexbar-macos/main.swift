@@ -270,6 +270,12 @@ private struct ClaudexBarMenu: View {
                     Text(payload.macOSDetail)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
+
+                    if let updatedTime = payload.updatedTimeText {
+                        Text("Updated \(updatedTime)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             } else {
                 Text(model.errorMessage ?? "Loading usage…")

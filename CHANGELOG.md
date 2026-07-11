@@ -13,6 +13,7 @@
 - Codex free reset-credit count in the menu bar (`O(1)`) and macOS dropdown.
 - macOS Keychain fallback for Claude Code credentials, including hex-encoded Keychain data.
 - Provider selector, manual refresh, five-minute refresh, launch-at-login, and native app packaging.
+- Subtle last-updated time in the macOS dropdown and Linux tooltip.
 - Swift and Bun unit tests, app icon generation, and cross-platform CI.
 
 ### Changed

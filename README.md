@@ -17,6 +17,7 @@ Both versions show the same Codex and Claude subscription limits. One shared Typ
 - Pace indicators showing whether usage is ahead of or under the current quota window.
 - Codex free reset-credit count in the menu bar and macOS dropdown.
 - Five-minute refresh, manual refresh, caching, and rate-limit backoff.
+- Subtle last-updated time in the macOS dropdown and Linux tooltip.
 - Native macOS launch-at-login control.
 - Linux-derived warning colors: only the pace arrow is accented; every label, value, quota glyph, and countdown keeps the native macOS color.
 - Automatic macOS/Linux installer routing.

@@ -53,6 +53,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let classes: [String]
     public let percentage: Double?
     public let resetCredits: Double?
+    public let updatedAt: String?
 
     private enum CodingKeys: String, CodingKey {
         case text
@@ -60,14 +61,16 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         case classes = "class"
         case percentage
         case resetCredits
+        case updatedAt
     }
 
-    public init(text: String, tooltip: String, classes: [String] = [], percentage: Double? = nil, resetCredits: Double? = nil) {
+    public init(text: String, tooltip: String, classes: [String] = [], percentage: Double? = nil, resetCredits: Double? = nil, updatedAt: String? = nil) {
         self.text = text
         self.tooltip = tooltip
         self.classes = classes
         self.percentage = percentage
         self.resetCredits = resetCredits
+        self.updatedAt = updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -76,6 +79,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         tooltip = try container.decode(String.self, forKey: .tooltip)
         percentage = try container.decodeIfPresent(Double.self, forKey: .percentage)
         resetCredits = try container.decodeIfPresent(Double.self, forKey: .resetCredits)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
 
         if let values = try? container.decode([String].self, forKey: .classes) {
             classes = values
@@ -111,6 +115,22 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
                 lines.remove(at: creditsIndex - 1)
             }
         }
+        if let updatedIndex = lines.firstIndex(where: { $0.hasPrefix("Updated:") }) {
+            lines.remove(at: updatedIndex)
+            if updatedIndex > 0, lines[updatedIndex - 1].isEmpty {
+                lines.remove(at: updatedIndex - 1)
+            }
+        }
         return lines.joined(separator: "\n")
+    }
+
+    public var updatedTimeText: String? {
+        guard let updatedAt else { return nil }
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = fractionalFormatter.date(from: updatedAt) ?? ISO8601DateFormatter().date(from: updatedAt) else {
+            return nil
+        }
+        return date.formatted(date: .omitted, time: .shortened)
     }
 }

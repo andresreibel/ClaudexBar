@@ -37,6 +37,7 @@ type WaybarPayload = {
     class?: string | string[];
     percentage?: number;
     resetCredits?: number;
+    updatedAt?: string;
 };
 
 type SpawnResult = {
@@ -62,7 +63,7 @@ type Pacing = {
     timeElapsedPct: number;
 };
 
-type CodexUsageSnapshot = {
+export type CodexUsageSnapshot = {
     sessionPct: number;
     weeklyPct: number;
     sessionResetAt: number | null;
@@ -207,11 +208,15 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
     }
 
     const percentage = toNumber(value.percentage) ?? undefined;
+    const resetCredits = toNumber(value.resetCredits) ?? undefined;
+    const updatedAt = toStringValue(value.updatedAt) ?? undefined;
     return {
         text,
         tooltip,
         class: cssClass,
         percentage,
+        resetCredits,
+        updatedAt,
     };
 }
 
@@ -350,6 +355,16 @@ function formatLocalDateTime(ms: number): string {
     return new Date(ms).toLocaleString();
 }
 
+export function stampPayload(payload: WaybarPayload, updatedAtMs: number = Date.now()): WaybarPayload {
+    const updatedAt = new Date(updatedAtMs);
+    const updatedTime = updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return {
+        ...payload,
+        tooltip: `${payload.tooltip}\n\nUpdated: ${updatedTime}`,
+        updatedAt: updatedAt.toISOString(),
+    };
+}
+
 function annotateCachedClaudePayload(payload: WaybarPayload, detail: string): WaybarPayload {
     return {
         ...payload,
@@ -364,7 +379,8 @@ async function fallbackToCachedClaudePayload(detail: string): Promise<WaybarPayl
         return null;
     }
 
-    return annotateCachedClaudePayload(cached.payload, detail);
+    const payload = cached.payload.updatedAt ? cached.payload : stampPayload(cached.payload, cached.savedAtMs);
+    return annotateCachedClaudePayload(payload, detail);
 }
 
 function addProviderBadge(text: string, badge: string): string {
@@ -815,7 +831,7 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
     };
 }
 
-function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
+export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const sessionCountdown = formatCountdown(usage.sessionResetAt);
     const weeklyCountdown = formatCountdown(usage.weeklyResetAt);
     const sessionWindowMs = usage.sessionWindowMinutes != null ? usage.sessionWindowMinutes * 60_000 : null;
@@ -844,7 +860,7 @@ function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
         tooltipLines.push("", `Free reset credits: ${creditLabel}`);
     }
 
-    return {
+    return stampPayload({
         text: addProviderBadge(
             `${weeklyPacing.icon} ◉${usage.weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
             providerBadge),
@@ -852,7 +868,7 @@ function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
         class: mergeClasses(cssClass, "provider-codex"),
         percentage: usage.sessionPct,
         resetCredits: usage.resetCredits ?? undefined,
-    };
+    });
 }
 
 type ClaudeOAuth = {
@@ -1092,7 +1108,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
     const sessionCountdown = formatCountdown(sessionResetAt);
     const weeklyCountdown = formatCountdown(weeklyResetAt);
 
-    const payload = {
+    const payload = stampPayload({
         text: addProviderBadge(
             `${weeklyPacing.icon} ◉${weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
             "A"),
@@ -1109,7 +1125,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
         ].join("\n"),
         class: mergeClasses(cssClass, "provider-claude"),
         percentage: sessionPct,
-    };
+    });
 
     await saveClaudeCachedPayload(payload);
     await clearClaudeBackoff();
@@ -1117,11 +1133,11 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
 }
 
 function errorPayload(message: string): WaybarPayload {
-    return {
+    return stampPayload({
         text: "⚠ cdx",
         tooltip: `ClaudexBar\n-----------\n${message}`,
         class: "error",
-    };
+    });
 }
 
 async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
