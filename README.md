@@ -10,6 +10,12 @@
 
 Both versions show the same Codex and Claude subscription limits. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; only the desktop interface differs.
 
+### macOS menu-bar app
+
+![ClaudexBar running natively on macOS](assets/claudexbar-macos.png)
+
+The native macOS dropdown shows Codex or Claude session and weekly usage, reset countdowns, available Codex reset credits, and the most recent refresh time. The menu-bar summary stays visible while you work.
+
 ## Features
 
 - Codex and Claude provider switching.
