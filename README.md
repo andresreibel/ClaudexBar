@@ -1,10 +1,14 @@
 # ClaudexBar
 
-ClaudexBar keeps Codex and Claude subscription limits visible on macOS and Linux without opening either dashboard.
+> [!IMPORTANT]
+> **ClaudexBar works on both macOS and Linux.** Run the same `./install.sh` command and it automatically installs the correct version for your operating system.
 
-One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks. macOS renders it through a native SwiftUI menu-bar app; Linux renders the same payload through Waybar.
+| Platform | What gets installed |
+| --- | --- |
+| **macOS** | Native SwiftUI menu-bar app at `/Applications/ClaudexBar.app` |
+| **Linux** | Waybar module powered by `~/.local/bin/claudexbar.ts` |
 
-![ClaudexBar on Waybar](screenshot-2026-02-17_00-41-59.png)
+Both versions show the same Codex and Claude subscription limits. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; only the desktop interface differs.
 
 ## Features
 
@@ -68,6 +72,8 @@ open /Applications/ClaudexBar.app
 The app is currently built from source and ad-hoc signed. There is no notarized downloadable build yet.
 
 ### Linux / Waybar
+
+![ClaudexBar on Linux Waybar](screenshot-2026-02-17_00-41-59.png)
 
 Install Bun, then add the CLI plus shell and Waybar integrations:
 
