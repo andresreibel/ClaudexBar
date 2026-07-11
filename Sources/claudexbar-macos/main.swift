@@ -1,0 +1,314 @@
+import AppKit
+import ClaudexBarCore
+import Foundation
+import ServiceManagement
+import SwiftUI
+
+private enum EngineError: LocalizedError {
+    case missingBun
+    case missingScript
+    case failed(String)
+    case invalidOutput(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingBun:
+            "Bun was not found. Install Bun at ~/.bun/bin/bun."
+        case .missingScript:
+            "The shared claudexbar.ts engine was not found."
+        case .failed(let message):
+            message
+        case .invalidOutput(let output):
+            "ClaudexBar returned invalid output: \(output)"
+        }
+    }
+}
+
+private struct EngineRunner: Sendable {
+    let bunURL: URL
+    let scriptURL: URL
+
+    static func resolve() throws -> EngineRunner {
+        let environment = ProcessInfo.processInfo.environment
+        let home = FileManager.default.homeDirectoryForCurrentUser
+
+        let bunCandidates = [
+            environment["CLAUDEXBAR_BUN"].map(URL.init(fileURLWithPath:)),
+            home.appendingPathComponent(".bun/bin/bun"),
+            URL(fileURLWithPath: "/opt/homebrew/bin/bun"),
+            URL(fileURLWithPath: "/usr/local/bin/bun")
+        ].compactMap { $0 }
+
+        guard let bunURL = bunCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+            throw EngineError.missingBun
+        }
+
+        let scriptCandidates = [
+            environment["CLAUDEXBAR_SCRIPT"].map(URL.init(fileURLWithPath:)),
+            Bundle.main.resourceURL?.appendingPathComponent("claudexbar.ts"),
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("claudexbar.ts"),
+            home.appendingPathComponent("code/ClaudexBar/claudexbar.ts"),
+            home.appendingPathComponent("Code/ClaudexBar/claudexbar.ts")
+        ].compactMap { $0 }
+
+        guard let scriptURL = scriptCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+            throw EngineError.missingScript
+        }
+
+        return EngineRunner(bunURL: bunURL, scriptURL: scriptURL)
+    }
+
+    func payload() async throws -> ClaudexBarPayload {
+        let output = try await run(arguments: [])
+        guard let data = output.data(using: .utf8) else {
+            throw EngineError.invalidOutput(output)
+        }
+        do {
+            return try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
+        } catch {
+            throw EngineError.invalidOutput(output)
+        }
+    }
+
+    func select(_ provider: ClaudexBarProvider) async throws {
+        _ = try await run(arguments: ["--provider", provider.rawValue])
+    }
+
+    private func run(arguments: [String]) async throws -> String {
+        try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            let stdout = Pipe()
+            let stderr = Pipe()
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            var environment = ProcessInfo.processInfo.environment
+            let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+
+            environment["PATH"] = "\(home)/.bun/bin:/opt/homebrew/bin:/usr/local/bin:\(existingPath)"
+            process.environment = environment
+            process.executableURL = bunURL
+            process.arguments = [scriptURL.path] + arguments
+            process.standardOutput = stdout
+            process.standardError = stderr
+
+            do {
+                try process.run()
+            } catch {
+                throw EngineError.failed("Could not start ClaudexBar: \(error.localizedDescription)")
+            }
+
+            process.waitUntilExit()
+            let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let errorOutput = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            guard process.terminationStatus == 0 else {
+                throw EngineError.failed(errorOutput.isEmpty ? "ClaudexBar exited with status \(process.terminationStatus)." : errorOutput)
+            }
+            return output
+        }.value
+    }
+}
+
+@MainActor
+private final class ClaudexBarModel: ObservableObject {
+    @Published var provider: ClaudexBarProvider
+    @Published var payload: ClaudexBarPayload?
+    @Published var errorMessage: String?
+    @Published var isRefreshing = false
+    @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    private var timer: Timer?
+
+    init() {
+        provider = Self.readProvider()
+        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.refresh()
+            }
+        }
+    }
+
+    var menuBarText: String {
+        if isRefreshing, payload == nil { return "cdx …" }
+        return payload?.text ?? "cdx"
+    }
+
+    var statusColor: Color {
+        switch payload?.severity {
+        case .error: .red
+        case .critical: .red
+        case .warning: .orange
+        case .stale: .yellow
+        case .normal, nil: .primary
+        }
+    }
+
+    func refresh() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        do {
+            let runner = try EngineRunner.resolve()
+            payload = try await runner.payload()
+            provider = Self.readProvider()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func select(_ nextProvider: ClaudexBarProvider) async {
+        guard nextProvider != provider else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        do {
+            let runner = try EngineRunner.resolve()
+            try await runner.select(nextProvider)
+            provider = nextProvider
+            payload = try await runner.payload()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+            errorMessage = nil
+        } catch {
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+            errorMessage = "Launch at login: \(error.localizedDescription)"
+        }
+    }
+
+    private static func readProvider() -> ClaudexBarProvider {
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/claudexbar/provider")
+        guard let value = try? String(contentsOf: path, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            let provider = ClaudexBarProvider(rawValue: value) else {
+            return .codex
+        }
+        return provider
+    }
+}
+
+private struct ClaudexBarMenu: View {
+    @ObservedObject var model: ClaudexBarModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ClaudexBar")
+                        .font(.headline)
+                    Text(model.provider.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if model.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            Picker("Provider", selection: Binding(
+                get: { model.provider },
+                set: { provider in Task { await model.select(provider) } }
+            )) {
+                ForEach(ClaudexBarProvider.allCases, id: \.self) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if let payload = model.payload {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(payload.text)
+                        .font(.system(.body, design: .monospaced, weight: .semibold))
+                        .foregroundStyle(model.statusColor)
+
+                    if let percentage = payload.percentage {
+                        ProgressView(value: min(max(percentage, 0), 100), total: 100)
+                            .tint(model.statusColor)
+                    }
+
+                    if let credits = payload.resetCredits {
+                        HStack {
+                            Text("Free reset credits")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(credits.formatted(.number.precision(.fractionLength(0...2))))
+                                .font(.system(.body, design: .monospaced, weight: .semibold))
+                        }
+                    }
+
+                    Text(payload.macOSDetail)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            } else {
+                Text(model.errorMessage ?? "Loading usage…")
+                    .font(.caption)
+                    .foregroundStyle(model.errorMessage == nil ? Color.secondary : Color.red)
+            }
+
+            if let errorMessage = model.errorMessage, model.payload != nil {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Refresh") {
+                    Task { await model.refresh() }
+                }
+                .disabled(model.isRefreshing)
+
+                Toggle("Launch at Login", isOn: Binding(
+                    get: { model.launchAtLogin },
+                    set: { model.setLaunchAtLogin($0) }
+                ))
+                .toggleStyle(.checkbox)
+
+                Spacer()
+
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 390)
+        .task {
+            await model.refresh()
+        }
+    }
+}
+
+@main
+private struct ClaudexBarApp: App {
+    @StateObject private var model = ClaudexBarModel()
+
+    var body: some Scene {
+        MenuBarExtra {
+            ClaudexBarMenu(model: model)
+        } label: {
+            Text(model.menuBarText)
+                .monospacedDigit()
+        }
+        .menuBarExtraStyle(.window)
+    }
+}

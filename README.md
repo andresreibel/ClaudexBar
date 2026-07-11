@@ -1,159 +1,127 @@
 # ClaudexBar
 
-Waybar usage module for Claude + Codex with one click-to-toggle provider.
+ClaudexBar keeps Codex and Claude subscription limits visible on macOS and Linux without opening either dashboard.
+
+One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks. macOS renders it through a native SwiftUI menu-bar app; Linux renders the same payload through Waybar.
 
 ![ClaudexBar on Waybar](screenshot-2026-02-17_00-41-59.png)
 
-<p align="center">
-  <img src="screenshot-2026-02-17_00-42-11.png" alt="ClaudexBar tooltip (Claude provider)" width="360">
-</p>
+## Features
 
-## What it does
+- Codex and Claude provider switching.
+- Session and weekly utilization with reset countdowns.
+- Pace indicators showing whether usage is ahead of or under the current quota window.
+- Codex free reset-credit count in the menu bar and macOS dropdown.
+- Five-minute refresh, manual refresh, caching, and rate-limit backoff.
+- Native macOS launch-at-login control.
+- Automatic macOS/Linux installer routing.
 
-- Outputs a Waybar-friendly JSON payload (`text`, `tooltip`, `class`, `percentage`).
-- Supports providers:
-  - `codex` (ChatGPT OAuth usage endpoint with `codex app-server` RPC fallback)
-  - `claude` (Anthropic OAuth usage endpoint with automatic token refresh)
-- Prefixes provider badge in bar text:
-  - `A` for Claude
-  - `O` for Codex
+## Display
 
-## How it works
+Example:
 
-### Provider selection
-
-- Provider state lives in `~/.codex/claudexbar/provider` (defaults to `codex`).
-- `--toggle` flips `codex` <-> `claude`.
-- `--provider <name>` sets it explicitly.
-- After changing provider, the script triggers a Waybar refresh via `pkill -RTMIN+11 waybar` (so your module updates immediately).
-
-### Data sources
-
-**Codex provider**
-- Reads auth from `~/.codex/auth.json` (created by `codex login`).
-- Primary path: calls the ChatGPT usage endpoint (`/wham/usage` on `chatgpt_base_url`).
-- Base URL comes from `~/.codex/config.toml` (`chatgpt_base_url`), defaulting to `https://chatgpt.com/backend-api`.
-- Fallback path: spawns `codex -s read-only -a untrusted app-server` and reads rate limits over RPC.
-
-**Claude provider**
-- Reads OAuth creds from `~/.claude/.credentials.json` (created by the `claude` CLI).
-- If the token is near expiry, refreshes it via Anthropic OAuth.
-- Calls `https://api.anthropic.com/api/oauth/usage` to get 5-hour + 7-day utilization windows.
-- Caches the last good Claude payload and reuses it during temporary API failures or `429` backoff windows.
-
-### What you see in the bar
-
-- The arrow (`↑ ↗ → ↘ ↓`) is a simple pace signal: usage vs time elapsed in the current window.
-- The text shows weekly utilization plus a countdown to the next reset.
-- The JSON `class` always includes a provider class (`provider-codex` or `provider-claude`).
-- Usage color classes:
-  - `warning` when weekly usage is `>= 75%` or pace is `> 1.05`
-  - `critical` when weekly usage is `>= 90%` or pace is `> 1.10`
-  - otherwise no usage class (neutral color, even if pace is slightly behind like `↘`)
-
-## Commands
-
-```bash
-claudex                  # render Waybar JSON payload for current provider
-claudex --toggle         # toggle provider: codex <-> claude (prints new provider)
-claudex --provider claude # set provider (prints provider)
-claudex --provider codex  # set provider (prints provider)
-
-cdx                      # interactive menu (from ~/.bashrc.d/claudexbar)
-cdxraw                   # raw JSON output
+```text
+O(1) → ◉1% ⧖1% 6d22h
 ```
 
-## Bash Integration
+| Part | Meaning |
+| --- | --- |
+| `O` / `A` | OpenAI Codex / Anthropic Claude |
+| `(1)` | Available Codex free reset credits |
+| `↑ ↗ → ↘ ↓` | Usage pace versus elapsed quota-window time |
+| `◉1%` | Weekly utilization |
+| `⧖1%` | Elapsed weekly quota window |
+| `6d22h` | Time until weekly reset |
 
-If you use `~/.bashrc.d`, create `~/.bashrc.d/claudexbar`:
+## Install
 
-```bash
-claudex() {
-  ~/.bun/bin/bun ~/.local/bin/claudexbar.ts "$@"
-}
+Clone the repository and run the same installer on either platform:
 
-cdxraw() {
-  claudex "$@"
-}
-
-cdxmenu() {
-  local state_dir="$HOME/.codex/claudexbar"
-  mkdir -p "$state_dir"
-  while true; do
-    local provider
-    provider="$(cat "$state_dir/provider" 2>/dev/null || echo codex)"
-    echo ""
-    echo "Claudex Menu"
-    echo "────────────"
-    echo "provider: $provider"
-    echo "1) toggle provider"
-    echo "2) provider -> claude"
-    echo "3) provider -> codex"
-    echo "q) quit"
-    read -rp "Select: " choice
-    case "$choice" in
-      1) claudex --toggle ;;
-      2) claudex --provider claude ;;
-      3) claudex --provider codex ;;
-      q|Q) break ;;
-      *) echo "Invalid choice" ;;
-    esac
-  done
-}
-
-cdx() {
-  if [[ $# -eq 0 ]]; then
-    cdxmenu
-    return
-  fi
-  claudex "$@"
-}
+```sh
+git clone https://github.com/andresreibel/ClaudexBar.git
+cd ClaudexBar
+./install.sh
 ```
 
-Make sure your `~/.bashrc` sources `~/.bashrc.d/*`:
+The installer uses `uname`:
 
-```bash
-for file in ~/.bashrc.d/*; do
-  [[ -f "$file" ]] && source "$file"
-done
+- macOS builds and installs `/Applications/ClaudexBar.app`.
+- Linux installs `~/.local/bin/claudexbar.ts`.
+
+### macOS
+
+Requirements:
+
+- macOS 14 or newer.
+- Xcode Command Line Tools / Swift.
+- Bun.
+- `librsvg` for the app icon build.
+
+```sh
+xcode-select --install  # only when Swift is missing
+brew install bun librsvg
+./install.sh
+open /Applications/ClaudexBar.app
 ```
 
-Optional: keep a backup copy and the repo copy in sync:
+The app is currently built from source and ad-hoc signed. There is no notarized downloadable build yet.
 
-```bash
-cp "$HOME/.local/bin/claudexbar.ts" "$HOME/omarchy-sync/scripts/claudexbar.ts"
-cp "$HOME/.local/bin/claudexbar.ts" "$HOME/Code/claudexbar/claudexbar.ts"
+### Linux / Waybar
+
+Install Bun, then add the CLI plus shell and Waybar integrations:
+
+```sh
+./install.sh --all
 ```
 
-## Waybar snippet
+Or install integrations separately:
 
-```jsonc
-"custom/claudexbar": {
-  "exec": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts",
-  "interval": 300,
-  "return-type": "json",
-  "tooltip": true,
-  "signal": 11,
-  "on-click": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts --toggle && pkill -RTMIN+11 waybar"
-}
+```sh
+./install.sh --bashrc
+./install.sh --waybar
 ```
 
-## State files
+Commands:
 
-- `~/.codex/claudexbar/provider`
-- `~/.codex/claudexbar/claude-last-good.json`
-- `~/.codex/claudexbar/claude-backoff.json`
+```sh
+claudex
+claudex --toggle
+claudex --provider claude
+claudex --provider codex
+```
 
-## Requirements
+## Authentication and state
 
-- Bun installed (`~/.bun/bin/bun` in snippets above).
-- Waybar with `custom/claudexbar` module enabled.
-- Logged in CLIs:
-  - `codex login`
-  - `claude` (for Claude provider usage)
+ClaudexBar reuses existing CLI credentials; it never stores credentials in the repository or application bundle.
 
-## Security
+- Codex: `~/.codex/auth.json`.
+- Claude on Linux: `~/.claude/.credentials.json`.
+- Claude on macOS: the credentials file when present, otherwise the `Claude Code-credentials` Keychain item.
+- Provider selection and caches: `~/.codex/claudexbar/`.
 
-- No machine-specific secrets are stored in this repo.
-- Runtime auth is read from local CLI credential files (`~/.codex/auth.json`, `~/.claude/.credentials.json`), which are not tracked in git.
-- The script may update those files when refreshing OAuth tokens.
+The shared engine may refresh existing OAuth credentials when required. Some Anthropic organizations reject the OAuth usage endpoint with `403`; see [troubleshooting](docs/TROUBLESHOOTING.md).
+
+## Development
+
+```sh
+make test
+make app
+make install
+open /Applications/ClaudexBar.app
+```
+
+Verification covers Swift payload decoding, macOS presentation, Keychain decoding, TypeScript compilation, packaging, and the installed bundle.
+
+See [architecture](docs/ARCHITECTURE.md), [troubleshooting](docs/TROUBLESHOOTING.md), and the [changelog](CHANGELOG.md).
+
+## Current verification
+
+- macOS native app: built, installed, signed, launched, and live Codex usage verified.
+- Codex free reset credits: verified against `rate_limit_reset_credits.available_count`.
+- Claude macOS Keychain discovery: verified.
+- Claude live usage: account-dependent; the current OAuth endpoint can reject organization-managed accounts.
+- Linux/Waybar: existing integration preserved; CI validates the shared engine and installer syntax.
+
+## License
+
+See [LICENSE](LICENSE).

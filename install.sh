@@ -6,15 +6,18 @@ REPO_DIR="${CLAUDEXBAR_REPO_DIR:-$SCRIPT_DIR}"
 INSTALL_BASHRC=0
 INSTALL_WAYBAR=0
 FORCE_BASHRC=0
+OS_NAME="$(uname -s)"
 
 usage() {
   cat <<'EOF'
-Install ClaudexBar
+Install ClaudexBar for macOS or Linux
 
 Usage:
   install.sh [options]
 
 Options:
+  macOS automatically builds and installs /Applications/ClaudexBar.app.
+  Linux always installs the shared CLI; these options add integrations:
   --bashrc        Install ~/.bashrc.d/claudexbar helper functions
   --waybar        Install/patch Waybar module + style
   --all           Equivalent to: --bashrc --waybar
@@ -23,7 +26,7 @@ Options:
   -h, --help      Show this help
 
 Examples:
-  ./install.sh
+  ./install.sh             # auto-detect macOS or Linux
   ./install.sh --bashrc
   ./install.sh --waybar
   ./install.sh --all
@@ -44,15 +47,47 @@ resolve_repo_dir() {
   if [[ ! -f "$REPO_DIR/claudexbar.ts" && -f "$HOME/Code/Claudexbar/claudexbar.ts" ]]; then
     REPO_DIR="$HOME/Code/Claudexbar"
   fi
+  if [[ ! -f "$REPO_DIR/claudexbar.ts" && -f "$HOME/Code/ClaudexBar/claudexbar.ts" ]]; then
+    REPO_DIR="$HOME/Code/ClaudexBar"
+  fi
+  if [[ ! -f "$REPO_DIR/claudexbar.ts" && -f "$HOME/code/ClaudexBar/claudexbar.ts" ]]; then
+    REPO_DIR="$HOME/code/ClaudexBar"
+  fi
 
   if [[ ! -f "$REPO_DIR/claudexbar.ts" ]]; then
     echo "Could not find claudexbar.ts in:"
     echo "  $SCRIPT_DIR"
     echo "  $HOME/Code/claudexbar"
     echo "  $HOME/Code/Claudexbar"
+    echo "  $HOME/Code/ClaudexBar"
+    echo "  $HOME/code/ClaudexBar"
     echo "Set CLAUDEXBAR_REPO_DIR or pass --source <dir>."
     exit 1
   fi
+}
+
+install_macos() {
+  if [[ "$INSTALL_BASHRC" -eq 1 || "$INSTALL_WAYBAR" -eq 1 || "$FORCE_BASHRC" -eq 1 ]]; then
+    echo "Linux integration flags (--bashrc, --waybar, --all, --force-bashrc) are not valid on macOS."
+    exit 1
+  fi
+
+  if [[ ! -x "$HOME/.bun/bin/bun" ]] && ! command -v bun >/dev/null 2>&1; then
+    echo "Bun is required. Install it before ClaudexBar: https://bun.sh"
+    exit 1
+  fi
+  if ! command -v swift >/dev/null 2>&1; then
+    echo "Swift is required. Install Xcode Command Line Tools first."
+    exit 1
+  fi
+  if ! command -v rsvg-convert >/dev/null 2>&1; then
+    echo "rsvg-convert is required for the app icon. Install it with: brew install librsvg"
+    exit 1
+  fi
+
+  make -C "$REPO_DIR" install
+  echo "Installed: /Applications/ClaudexBar.app"
+  echo "Open it with: open /Applications/ClaudexBar.app"
 }
 
 install_script() {
@@ -243,6 +278,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 resolve_repo_dir
+
+if [[ "$OS_NAME" == "Darwin" ]]; then
+  install_macos
+  exit 0
+fi
+
+if [[ "$OS_NAME" != "Linux" ]]; then
+  echo "Unsupported operating system: $OS_NAME"
+  exit 1
+fi
+
 install_script
 
 if [[ "$INSTALL_BASHRC" -eq 1 ]]; then

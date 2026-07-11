@@ -15,6 +15,7 @@ const CODEX_AUTH_PATH = `${HOME}/.codex/auth.json`;
 const CODEX_CONFIG_PATH = `${HOME}/.codex/config.toml`;
 
 const CLAUDE_CREDS_PATH = `${HOME}/.claude/.credentials.json`;
+const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
@@ -35,6 +36,7 @@ type WaybarPayload = {
     tooltip: string;
     class?: string | string[];
     percentage?: number;
+    resetCredits?: number;
 };
 
 type SpawnResult = {
@@ -68,6 +70,7 @@ type CodexUsageSnapshot = {
     sessionWindowMinutes: number | null;
     weeklyWindowMinutes: number | null;
     credits: number | null;
+    resetCredits: number | null;
     source: "oauth" | "rpc";
     planType: string | null;
 };
@@ -100,6 +103,14 @@ function toNumber(value: unknown): number | null {
 
 function toStringValue(value: unknown): string | null {
     return typeof value == "string" && value.trim().length > 0 ? value : null;
+}
+
+export function decodeMacOSKeychainSecret(value: string): string {
+    const trimmed = value.trim();
+    if (trimmed.length > 0 && trimmed.length % 2 == 0 && /^[0-9a-f]+$/i.test(trimmed)) {
+        return Buffer.from(trimmed, "hex").toString("utf8");
+    }
+    return trimmed;
 }
 
 function readNestedRecord(root: JSONRecord, ...path: string[]): JSONRecord | null {
@@ -287,6 +298,9 @@ async function runCommand(command: string, args: string[], timeoutMs: number): P
 }
 
 async function refreshWaybar(): Promise<void> {
+    if (process.platform != "linux") {
+        return;
+    }
     try {
         await runCommand("pkill", ["-RTMIN+11", "waybar"], 2_000);
     } catch {
@@ -353,7 +367,7 @@ async function fallbackToCachedClaudePayload(detail: string): Promise<WaybarPayl
     return annotateCachedClaudePayload(cached.payload, detail);
 }
 
-function addProviderBadge(text: string, badge: "A" | "O"): string {
+function addProviderBadge(text: string, badge: string): string {
     const trimmed = text.trim();
     if (!trimmed) {
         return badge;
@@ -367,6 +381,11 @@ function addProviderBadge(text: string, badge: "A" | "O"): string {
     }
 
     return `${badge} ${trimmed}`;
+}
+
+export function formatCredits(value: number): string {
+    const rounded = Math.round(value * 100) / 100;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, "");
 }
 
 function formatCountdown(resetAtEpochSeconds: number | null): string {
@@ -613,6 +632,8 @@ function parseCodexOAuthUsage(raw: unknown): CodexUsageSnapshot {
 
     const creditsNode = readNestedRecord(raw, "credits");
     const credits = toNumber(creditsNode?.balance);
+    const resetCreditsNode = readNestedRecord(raw, "rate_limit_reset_credits");
+    const resetCredits = toNumber(resetCreditsNode?.available_count);
     const planType = toStringValue(raw.plan_type);
 
     return {
@@ -623,6 +644,7 @@ function parseCodexOAuthUsage(raw: unknown): CodexUsageSnapshot {
         sessionWindowMinutes: sessionWindowSeconds == null ? null : Math.max(1, Math.round(sessionWindowSeconds / 60)),
         weeklyWindowMinutes: weeklyWindowSeconds == null ? null : Math.max(1, Math.round(weeklyWindowSeconds / 60)),
         credits,
+        resetCredits,
         source: "oauth",
         planType,
     };
@@ -770,6 +792,7 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
     const primary = readNestedRecord(rateLimits, "primary");
     const secondary = readNestedRecord(rateLimits, "secondary");
     const creditsNode = readNestedRecord(rateLimits, "credits");
+    const resetCreditsNode = readNestedRecord(rateLimitResult, "rateLimitResetCredits");
 
     const sessionPct = toNumber(primary?.usedPercent);
     const weeklyPct = toNumber(secondary?.usedPercent);
@@ -786,6 +809,7 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
         sessionWindowMinutes: toNumber(primary?.windowDurationMins),
         weeklyWindowMinutes: toNumber(secondary?.windowDurationMins),
         credits: toNumber(creditsNode?.balance),
+        resetCredits: toNumber(resetCreditsNode?.availableCount),
         source: "rpc",
         planType: toStringValue(rateLimits.planType),
     };
@@ -801,6 +825,8 @@ function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const weeklyPacing = calcPacing(usage.weeklyPct, usage.weeklyResetAt, weeklyWindowMs);
 
     const cssClass = deriveCssClass(usage.weeklyPct, weeklyPacing);
+    const creditLabel = usage.resetCredits == null ? null : formatCredits(usage.resetCredits);
+    const providerBadge = creditLabel == null ? "O" : `O(${creditLabel})`;
 
     const tooltipLines = [
         "ClaudexBar",
@@ -814,19 +840,25 @@ function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
         `  Resets in ${weeklyCountdown}`,
     ];
 
+    if (creditLabel != null) {
+        tooltipLines.push("", `Free reset credits: ${creditLabel}`);
+    }
+
     return {
         text: addProviderBadge(
             `${weeklyPacing.icon} ◉${usage.weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
-            "O"),
+            providerBadge),
         tooltip: tooltipLines.join("\n"),
         class: mergeClasses(cssClass, "provider-codex"),
         percentage: usage.sessionPct,
+        resetCredits: usage.resetCredits ?? undefined,
     };
 }
 
 type ClaudeOAuth = {
     raw: JSONRecord;
     oauth: JSONRecord;
+    storage: "file" | "keychain";
     accessToken: string;
     refreshToken: string | null;
     expiresAtMs: number | null;
@@ -834,10 +866,24 @@ type ClaudeOAuth = {
 
 async function loadClaudeOAuth(): Promise<ClaudeOAuth> {
     let rawText: string;
+    let storage: "file" | "keychain" = "file";
     try {
         rawText = await readFile(CLAUDE_CREDS_PATH, "utf8");
     } catch {
-        throw new Error("Missing ~/.claude/.credentials.json. Run: claude");
+        if (process.platform != "darwin") {
+            throw new Error("Missing ~/.claude/.credentials.json. Run: claude");
+        }
+
+        const result = await runCommand(
+            "/usr/bin/security",
+            ["find-generic-password", "-s", CLAUDE_KEYCHAIN_SERVICE, "-w"],
+            5_000,
+        );
+        if (result.code != 0 || !result.stdout.trim()) {
+            throw new Error("Missing Claude Code credentials in the macOS Keychain. Run: claude");
+        }
+        rawText = decodeMacOSKeychainSecret(result.stdout);
+        storage = "keychain";
     }
 
     let parsed: unknown;
@@ -867,14 +913,29 @@ async function loadClaudeOAuth(): Promise<ClaudeOAuth> {
     return {
         raw: parsed,
         oauth,
+        storage,
         accessToken,
         refreshToken,
         expiresAtMs,
     };
 }
 
-async function saveClaudeOAuth(raw: JSONRecord): Promise<void> {
-    await writeFile(CLAUDE_CREDS_PATH, JSON.stringify(raw, null, 2), "utf8");
+async function saveClaudeOAuth(auth: ClaudeOAuth): Promise<void> {
+    const serialized = JSON.stringify(auth.raw, null, 2);
+    if (auth.storage == "file") {
+        await writeFile(CLAUDE_CREDS_PATH, serialized, "utf8");
+        return;
+    }
+
+    const account = process.env.USER?.trim() || HOME.split("/").filter(Boolean).at(-1) || "user";
+    const result = await runCommand(
+        "/usr/bin/security",
+        ["add-generic-password", "-U", "-a", account, "-s", CLAUDE_KEYCHAIN_SERVICE, "-w", serialized],
+        5_000,
+    );
+    if (result.code != 0) {
+        throw new Error(`Could not update Claude credentials in Keychain: ${result.stderr.trim() || result.code}`);
+    }
 }
 
 async function maybeRefreshClaudeToken(auth: ClaudeOAuth): Promise<ClaudeOAuth> {
@@ -919,7 +980,7 @@ async function maybeRefreshClaudeToken(auth: ClaudeOAuth): Promise<ClaudeOAuth> 
     auth.oauth.accessToken = accessToken;
     auth.oauth.refreshToken = refreshToken;
     auth.oauth.expiresAt = Date.now() + expiresIn * 1000;
-    await saveClaudeOAuth(auth.raw);
+    await saveClaudeOAuth(auth);
 
     return {
         ...auth,
@@ -1120,7 +1181,9 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(payload));
 }
 
-main().catch((err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
-    console.log(JSON.stringify(errorPayload(message)));
-});
+if (import.meta.main) {
+    main().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.log(JSON.stringify(errorPayload(message)));
+    });
+}
