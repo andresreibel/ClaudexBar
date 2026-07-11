@@ -7,7 +7,7 @@
 - Native SwiftUI menu-bar app for macOS 14+.
 - Linux Waybar warning and critical color behavior in the native macOS status item.
 - Higher-contrast macOS critical red with semibold status glyphs.
-- Limited macOS severity color to the pace and quota glyphs so values retain native menu-bar contrast.
+- Limited macOS severity color to the pace arrow so every other menu-bar element retains native contrast.
 - One installer that detects macOS or Linux and installs the correct platform integration.
 - Shared JSON payload contract between the TypeScript engine and SwiftUI app.
 - Codex free reset-credit count in the menu bar (`O(1)`) and macOS dropdown.

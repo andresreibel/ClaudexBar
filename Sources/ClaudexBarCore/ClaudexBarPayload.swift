@@ -43,7 +43,7 @@ public enum ClaudexBarSeverity: String, Sendable {
     }
 
     public static func isStatusAccentSymbol(_ character: Character) -> Bool {
-        "↑↗→↘↓◉⧖".contains(character)
+        "↑↗→↘↓".contains(character)
     }
 }
 
