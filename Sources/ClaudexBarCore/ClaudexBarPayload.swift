@@ -41,6 +41,10 @@ public enum ClaudexBarSeverity: String, Sendable {
         case .normal, .stale, .error: nil
         }
     }
+
+    public static func isStatusAccentSymbol(_ character: Character) -> Bool {
+        "↑↗→↘↓◉⧖".contains(character)
+    }
 }
 
 public struct ClaudexBarPayload: Decodable, Equatable, Sendable {

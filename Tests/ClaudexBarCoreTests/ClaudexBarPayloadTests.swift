@@ -34,6 +34,11 @@ import Testing
     #expect(ClaudexBarSeverity.error.linuxStatusColorHex == nil)
     #expect(ClaudexBarSeverity.warning.macOSStatusColorHex == "#ff9e64")
     #expect(ClaudexBarSeverity.critical.macOSStatusColorHex == "#ff453a")
+    #expect(ClaudexBarSeverity.isStatusAccentSymbol("↑"))
+    #expect(ClaudexBarSeverity.isStatusAccentSymbol("◉"))
+    #expect(ClaudexBarSeverity.isStatusAccentSymbol("⧖"))
+    #expect(!ClaudexBarSeverity.isStatusAccentSymbol("O"))
+    #expect(!ClaudexBarSeverity.isStatusAccentSymbol("1"))
 }
 
 @Test func removesDuplicatedHeaderFromMacOSDetailOnly() {

@@ -364,15 +364,25 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
 
         let title = model.menuBarText
         let severity = model.payload?.severity ?? .normal
-        let color = severity.macOSStatusColorHex.flatMap(NSColor.init(hex:)) ?? .labelColor
-        let fontWeight: NSFont.Weight = severity == .warning || severity == .critical ? .semibold : .regular
-        button.attributedTitle = NSAttributedString(
+        let baseFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let accentFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        let attributedTitle = NSMutableAttributedString(
             string: title,
             attributes: [
-                .foregroundColor: color,
-                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: fontWeight),
+                .foregroundColor: NSColor.labelColor,
+                .font: baseFont,
             ]
         )
+        if let color = severity.macOSStatusColorHex.flatMap(NSColor.init(hex:)) {
+            for index in title.indices where ClaudexBarSeverity.isStatusAccentSymbol(title[index]) {
+                let nextIndex = title.index(after: index)
+                attributedTitle.addAttributes(
+                    [.foregroundColor: color, .font: accentFont],
+                    range: NSRange(index..<nextIndex, in: title)
+                )
+            }
+        }
+        button.attributedTitle = attributedTitle
         button.toolTip = model.payload?.tooltip ?? model.errorMessage ?? "ClaudexBar"
         button.setAccessibilityLabel("ClaudexBar, \(title)")
     }
