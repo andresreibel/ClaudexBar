@@ -52,3 +52,13 @@ import Testing
     #expect(payload.macOSDetail == "Provider: Codex (oauth)\n\nSession: 1%")
     #expect(payload.tooltip.hasPrefix("ClaudexBar\n-----------"))
 }
+
+@Test func keepsWeeklyUsageInMacOSDetail() {
+    let payload = ClaudexBarPayload(
+        text: "O(1) ↑ ◉4% ⧖2% 6d21h",
+        tooltip: "ClaudexBar\n-----------\nProvider: Codex (oauth)\n\nSession: 26% (52% under)\n  Resets in 2h17m\n\nWeekly: 4% (100% ahead)\n  Resets in 6d21h\n\nFree reset credits: 1\n\nUpdated: 03:45 PM"
+    )
+
+    #expect(payload.macOSDetail.contains("Weekly: 4% (100% ahead)"))
+    #expect(payload.macOSDetail.contains("Resets in 6d21h"))
+}

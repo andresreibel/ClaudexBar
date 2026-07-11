@@ -270,6 +270,7 @@ private struct ClaudexBarMenu: View {
                     Text(payload.macOSDetail)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if let updatedTime = payload.updatedTimeText {
                         Text("Updated \(updatedTime)")
