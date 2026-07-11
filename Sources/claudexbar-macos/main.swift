@@ -1,5 +1,6 @@
 import AppKit
 import ClaudexBarCore
+import Combine
 import Foundation
 import ServiceManagement
 import SwiftUI
@@ -202,6 +203,19 @@ private final class ClaudexBarModel: ObservableObject {
     }
 }
 
+private extension NSColor {
+    convenience init?(hex: String) {
+        let value = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard value.count == 6, let rgb = UInt64(value, radix: 16) else { return nil }
+        self.init(
+            red: CGFloat((rgb >> 16) & 0xff) / 255,
+            green: CGFloat((rgb >> 8) & 0xff) / 255,
+            blue: CGFloat(rgb & 0xff) / 255,
+            alpha: 1
+        )
+    }
+}
+
 private struct ClaudexBarMenu: View {
     @ObservedObject var model: ClaudexBarModel
 
@@ -298,17 +312,78 @@ private struct ClaudexBarMenu: View {
     }
 }
 
+@MainActor
+private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+    private let model = ClaudexBarModel()
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let popover = NSPopover()
+    private var cancellables = Set<AnyCancellable>()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.accessory)
+
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        popover.contentViewController = NSHostingController(rootView: ClaudexBarMenu(model: model))
+
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(togglePopover)
+            button.sendAction(on: [.leftMouseUp])
+        }
+
+        model.$payload
+            .combineLatest(model.$isRefreshing)
+            .sink { [weak self] _, _ in
+                self?.updateStatusItem()
+            }
+            .store(in: &cancellables)
+
+        model.$errorMessage
+            .sink { [weak self] _ in
+                self?.updateStatusItem()
+            }
+            .store(in: &cancellables)
+
+        updateStatusItem()
+        Task { await model.refresh() }
+    }
+
+    @objc private func togglePopover() {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    private func updateStatusItem() {
+        guard let button = statusItem.button else { return }
+
+        let title = model.menuBarText
+        let severity = model.payload?.severity ?? .normal
+        let color = severity.linuxStatusColorHex.flatMap(NSColor.init(hex:)) ?? .labelColor
+        button.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .foregroundColor: color,
+                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+            ]
+        )
+        button.toolTip = model.payload?.tooltip ?? model.errorMessage ?? "ClaudexBar"
+        button.setAccessibilityLabel("ClaudexBar, \(title)")
+    }
+}
+
 @main
 private struct ClaudexBarApp: App {
-    @StateObject private var model = ClaudexBarModel()
+    @NSApplicationDelegateAdaptor(ClaudexBarAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            ClaudexBarMenu(model: model)
-        } label: {
-            Text(model.menuBarText)
-                .monospacedDigit()
+        Settings {
+            EmptyView()
         }
-        .menuBarExtraStyle(.window)
     }
 }

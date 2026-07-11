@@ -5,6 +5,7 @@
 ### Added
 
 - Native SwiftUI menu-bar app for macOS 14+.
+- Exact Linux Waybar warning and critical colors in the native macOS status item.
 - One installer that detects macOS or Linux and installs the correct platform integration.
 - Shared JSON payload contract between the TypeScript engine and SwiftUI app.
 - Codex free reset-credit count in the menu bar (`O(1)`) and macOS dropdown.

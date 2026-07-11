@@ -26,6 +26,14 @@ import Testing
     #expect(ClaudexBarProvider.claude.badge == "A")
 }
 
+@Test func menuBarColorsMatchLinuxWaybar() {
+    #expect(ClaudexBarSeverity.warning.linuxStatusColorHex == "#ff9e64")
+    #expect(ClaudexBarSeverity.critical.linuxStatusColorHex == "#f7768e")
+    #expect(ClaudexBarSeverity.normal.linuxStatusColorHex == nil)
+    #expect(ClaudexBarSeverity.stale.linuxStatusColorHex == nil)
+    #expect(ClaudexBarSeverity.error.linuxStatusColorHex == nil)
+}
+
 @Test func removesDuplicatedHeaderFromMacOSDetailOnly() {
     let payload = ClaudexBarPayload(
         text: "O(1)",

@@ -14,6 +14,7 @@ One shared TypeScript engine owns authentication, quota fetching, pacing, reset 
 - Codex free reset-credit count in the menu bar and macOS dropdown.
 - Five-minute refresh, manual refresh, caching, and rate-limit backoff.
 - Native macOS launch-at-login control.
+- The same warning (`#ff9e64`) and critical (`#f7768e`) status colors on macOS and Waybar.
 - Automatic macOS/Linux installer routing.
 
 ## Display

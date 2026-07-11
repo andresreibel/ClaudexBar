@@ -25,6 +25,14 @@ public enum ClaudexBarSeverity: String, Sendable {
     case warning
     case critical
     case error
+
+    public var linuxStatusColorHex: String? {
+        switch self {
+        case .warning: "#ff9e64"
+        case .critical: "#f7768e"
+        case .normal, .stale, .error: nil
+        }
+    }
 }
 
 public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
