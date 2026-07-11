@@ -364,12 +364,13 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
 
         let title = model.menuBarText
         let severity = model.payload?.severity ?? .normal
-        let color = severity.linuxStatusColorHex.flatMap(NSColor.init(hex:)) ?? .labelColor
+        let color = severity.macOSStatusColorHex.flatMap(NSColor.init(hex:)) ?? .labelColor
+        let fontWeight: NSFont.Weight = severity == .warning || severity == .critical ? .semibold : .regular
         button.attributedTitle = NSAttributedString(
             string: title,
             attributes: [
                 .foregroundColor: color,
-                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: fontWeight),
             ]
         )
         button.toolTip = model.payload?.tooltip ?? model.errorMessage ?? "ClaudexBar"

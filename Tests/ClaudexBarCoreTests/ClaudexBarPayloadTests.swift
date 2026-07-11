@@ -32,6 +32,8 @@ import Testing
     #expect(ClaudexBarSeverity.normal.linuxStatusColorHex == nil)
     #expect(ClaudexBarSeverity.stale.linuxStatusColorHex == nil)
     #expect(ClaudexBarSeverity.error.linuxStatusColorHex == nil)
+    #expect(ClaudexBarSeverity.warning.macOSStatusColorHex == "#ff9e64")
+    #expect(ClaudexBarSeverity.critical.macOSStatusColorHex == "#ff453a")
 }
 
 @Test func removesDuplicatedHeaderFromMacOSDetailOnly() {
