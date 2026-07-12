@@ -64,8 +64,8 @@ type Pacing = {
 };
 
 export type CodexUsageSnapshot = {
-    sessionPct: number;
-    weeklyPct: number;
+    sessionPct: number | null;
+    weeklyPct: number | null;
     sessionResetAt: number | null;
     weeklyResetAt: number | null;
     sessionWindowMinutes: number | null;
@@ -626,7 +626,7 @@ async function resolveCodexBaseUrl(): Promise<string> {
     return "https://chatgpt.com/backend-api";
 }
 
-function parseCodexOAuthUsage(raw: unknown): CodexUsageSnapshot {
+export function parseCodexOAuthUsage(raw: unknown): CodexUsageSnapshot {
     if (!isRecord(raw)) {
         throw new Error("Codex OAuth response is not an object");
     }
@@ -634,15 +634,19 @@ function parseCodexOAuthUsage(raw: unknown): CodexUsageSnapshot {
     const rateLimit = readNestedRecord(raw, "rate_limit");
     const primary = rateLimit ? readNestedRecord(rateLimit, "primary_window") : null;
     const secondary = rateLimit ? readNestedRecord(rateLimit, "secondary_window") : null;
+    const primaryWindowSeconds = toNumber(primary?.limit_window_seconds);
+    const primaryIsWeekly = secondary == null && primaryWindowSeconds != null && primaryWindowSeconds >= 24 * 60 * 60;
+    const session = primaryIsWeekly ? null : primary;
+    const weekly = secondary ?? (primaryIsWeekly ? primary : null);
 
-    const sessionPct = toNumber(primary?.used_percent) ?? null;
-    const weeklyPct = toNumber(secondary?.used_percent) ?? null;
-    const sessionResetAt = toNumber(primary?.reset_at);
-    const weeklyResetAt = toNumber(secondary?.reset_at);
-    const sessionWindowSeconds = toNumber(primary?.limit_window_seconds);
-    const weeklyWindowSeconds = toNumber(secondary?.limit_window_seconds);
+    const sessionPct = toNumber(session?.used_percent) ?? null;
+    const weeklyPct = toNumber(weekly?.used_percent) ?? null;
+    const sessionResetAt = toNumber(session?.reset_at);
+    const weeklyResetAt = toNumber(weekly?.reset_at);
+    const sessionWindowSeconds = toNumber(session?.limit_window_seconds);
+    const weeklyWindowSeconds = toNumber(weekly?.limit_window_seconds);
 
-    if (sessionPct == null || weeklyPct == null) {
+    if (sessionPct == null && weeklyPct == null) {
         throw new Error("OAuth payload missing rate-limit windows");
     }
 
@@ -653,8 +657,8 @@ function parseCodexOAuthUsage(raw: unknown): CodexUsageSnapshot {
     const planType = toStringValue(raw.plan_type);
 
     return {
-        sessionPct: clamp(Math.round(sessionPct), 0, 100),
-        weeklyPct: clamp(Math.round(weeklyPct), 0, 100),
+        sessionPct: sessionPct == null ? null : clamp(Math.round(sessionPct), 0, 100),
+        weeklyPct: weeklyPct == null ? null : clamp(Math.round(weeklyPct), 0, 100),
         sessionResetAt: sessionResetAt == null ? null : Math.round(sessionResetAt),
         weeklyResetAt: weeklyResetAt == null ? null : Math.round(weeklyResetAt),
         sessionWindowMinutes: sessionWindowSeconds == null ? null : Math.max(1, Math.round(sessionWindowSeconds / 60)),
@@ -807,23 +811,27 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
 
     const primary = readNestedRecord(rateLimits, "primary");
     const secondary = readNestedRecord(rateLimits, "secondary");
+    const primaryWindowMinutes = toNumber(primary?.windowDurationMins);
+    const primaryIsWeekly = secondary == null && primaryWindowMinutes != null && primaryWindowMinutes >= 24 * 60;
+    const session = primaryIsWeekly ? null : primary;
+    const weekly = secondary ?? (primaryIsWeekly ? primary : null);
     const creditsNode = readNestedRecord(rateLimits, "credits");
     const resetCreditsNode = readNestedRecord(rateLimitResult, "rateLimitResetCredits");
 
-    const sessionPct = toNumber(primary?.usedPercent);
-    const weeklyPct = toNumber(secondary?.usedPercent);
+    const sessionPct = toNumber(session?.usedPercent);
+    const weeklyPct = toNumber(weekly?.usedPercent);
 
-    if (sessionPct == null || weeklyPct == null) {
+    if (sessionPct == null && weeklyPct == null) {
         throw new Error("RPC missing usage windows");
     }
 
     return {
-        sessionPct: clamp(Math.round(sessionPct), 0, 100),
-        weeklyPct: clamp(Math.round(weeklyPct), 0, 100),
-        sessionResetAt: toNumber(primary?.resetsAt),
-        weeklyResetAt: toNumber(secondary?.resetsAt),
-        sessionWindowMinutes: toNumber(primary?.windowDurationMins),
-        weeklyWindowMinutes: toNumber(secondary?.windowDurationMins),
+        sessionPct: sessionPct == null ? null : clamp(Math.round(sessionPct), 0, 100),
+        weeklyPct: weeklyPct == null ? null : clamp(Math.round(weeklyPct), 0, 100),
+        sessionResetAt: toNumber(session?.resetsAt),
+        weeklyResetAt: toNumber(weekly?.resetsAt),
+        sessionWindowMinutes: toNumber(session?.windowDurationMins),
+        weeklyWindowMinutes: toNumber(weekly?.windowDurationMins),
         credits: toNumber(creditsNode?.balance),
         resetCredits: toNumber(resetCreditsNode?.availableCount),
         source: "rpc",
@@ -837,24 +845,42 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const sessionWindowMs = usage.sessionWindowMinutes != null ? usage.sessionWindowMinutes * 60_000 : null;
     const weeklyWindowMs = usage.weeklyWindowMinutes != null ? usage.weeklyWindowMinutes * 60_000 : null;
 
-    const sessionPacing = calcPacing(usage.sessionPct, usage.sessionResetAt, sessionWindowMs);
-    const weeklyPacing = calcPacing(usage.weeklyPct, usage.weeklyResetAt, weeklyWindowMs);
+    const sessionPacing = usage.sessionPct == null
+        ? null
+        : calcPacing(usage.sessionPct, usage.sessionResetAt, sessionWindowMs);
+    const weeklyPacing = usage.weeklyPct == null
+        ? null
+        : calcPacing(usage.weeklyPct, usage.weeklyResetAt, weeklyWindowMs);
+    const displayedPct = usage.weeklyPct ?? usage.sessionPct;
+    const displayedPacing = weeklyPacing ?? sessionPacing;
 
-    const cssClass = deriveCssClass(usage.weeklyPct, weeklyPacing);
+    if (displayedPct == null || displayedPacing == null) {
+        throw new Error("Codex usage missing rate-limit windows");
+    }
+
+    const cssClass = deriveCssClass(displayedPct, displayedPacing);
     const creditLabel = usage.resetCredits == null ? null : formatCredits(usage.resetCredits);
     const providerBadge = creditLabel == null ? "O" : `O(${creditLabel})`;
 
     const tooltipLines = [
         "ClaudexBar",
         "-----------",
-        `Provider: Codex (${usage.source})`,
         "",
-        `Session: ${usage.sessionPct}% (${sessionPacing.status})`,
-        `  Resets in ${sessionCountdown}`,
-        "",
-        `Weekly: ${usage.weeklyPct}% (${weeklyPacing.status})`,
-        `  Resets in ${weeklyCountdown}`,
     ];
+
+    if (usage.sessionPct != null && sessionPacing != null) {
+        tooltipLines.push(`Session: ${usage.sessionPct}% (${sessionPacing.status})`, `  Resets in ${sessionCountdown}`);
+    } else {
+        tooltipLines.push("Session: currently unavailable");
+    }
+
+    tooltipLines.push("");
+
+    if (usage.weeklyPct != null && weeklyPacing != null) {
+        tooltipLines.push(`Weekly: ${usage.weeklyPct}% (${weeklyPacing.status})`, `  Resets in ${weeklyCountdown}`);
+    } else {
+        tooltipLines.push("Weekly: currently unavailable");
+    }
 
     if (creditLabel != null) {
         tooltipLines.push("", `Free reset credits: ${creditLabel}`);
@@ -862,11 +888,11 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
 
     return stampPayload({
         text: addProviderBadge(
-            `${weeklyPacing.icon} ◉${usage.weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
+            `${displayedPacing.icon} ◉${displayedPct}% ⧖${displayedPacing.timeElapsedPct}% ${weeklyPacing == null ? sessionCountdown : weeklyCountdown}`,
             providerBadge),
         tooltip: tooltipLines.join("\n"),
         class: mergeClasses(cssClass, "provider-codex"),
-        percentage: usage.sessionPct,
+        percentage: usage.sessionPct ?? usage.weeklyPct ?? undefined,
         resetCredits: usage.resetCredits ?? undefined,
     });
 }
@@ -1115,7 +1141,6 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
         tooltip: [
             "ClaudexBar",
             "-----------",
-            "Provider: Claude (oauth)",
             "",
             `Session: ${sessionPct}% (${sessionPacing.status})`,
             `  Resets in ${sessionCountdown}`,

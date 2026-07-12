@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { codexUsageToPayload, decodeMacOSKeychainSecret, formatCredits, stampPayload } from "./claudexbar";
+import {
+    codexUsageToPayload,
+    decodeMacOSKeychainSecret,
+    formatCredits,
+    parseCodexOAuthUsage,
+    stampPayload,
+} from "./claudexbar";
 
 describe("decodeMacOSKeychainSecret", () => {
     test("decodes hex-encoded Keychain data", () => {
@@ -35,6 +41,50 @@ describe("codexUsageToPayload", () => {
         });
         expect(payload.updatedAt).toBeDefined();
         expect(payload.tooltip).toContain("\n\nUpdated:");
+        expect(payload.tooltip).not.toContain("Provider:");
+    });
+
+    test("renders the session window when weekly usage is unavailable", () => {
+        const usage = parseCodexOAuthUsage({
+            rate_limit: {
+                primary_window: {
+                    used_percent: 12,
+                    limit_window_seconds: 18_000,
+                    reset_at: 1_800_000_000,
+                },
+                secondary_window: null,
+            },
+        });
+
+        const payload = codexUsageToPayload(usage);
+
+        expect(payload.text).toContain("◉12%");
+        expect(payload.tooltip).toContain("Session: 12%");
+        expect(payload.tooltip).toContain("Weekly: currently unavailable");
+        expect(payload.tooltip).not.toContain("Weekly: null%");
+    });
+
+    test("recognizes a lone seven-day primary window as weekly usage", () => {
+        const usage = parseCodexOAuthUsage({
+            rate_limit: {
+                primary_window: {
+                    used_percent: 34,
+                    limit_window_seconds: 604_800,
+                    reset_at: 1_800_000_000,
+                },
+                secondary_window: null,
+            },
+        });
+
+        const payload = codexUsageToPayload(usage);
+
+        expect(payload.text).toContain("◉34%");
+        expect(payload.tooltip).toContain("Session: currently unavailable");
+        expect(payload.tooltip).toContain("Weekly: 34%");
+    });
+
+    test("rejects OAuth usage when every window is unavailable", () => {
+        expect(() => parseCodexOAuthUsage({ rate_limit: {} })).toThrow("OAuth payload missing rate-limit windows");
     });
 });
 
