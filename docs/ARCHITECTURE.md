@@ -27,6 +27,15 @@ It emits a Waybar-compatible JSON payload:
 
 `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
 
+## Quota windows
+
+Pacing needs a window length, because `⧖` reports how much of the window has elapsed. The two providers supply it differently:
+
+- Codex returns `limit_window_seconds` per window, so the engine uses the reported length.
+- Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (72 hours).
+
+Claude's weekly field is named `seven_day` but the window is 72 hours. Treating it as seven days places the window start days before a new account existed and overstates elapsed time. Verify any change to these constants against a live response: derive the implied start from `resets_at` minus the window and confirm it is a time the account could plausibly have been using.
+
 ## Linux adapter
 
 Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Waybar executes it every five minutes and consumes the JSON payload directly. Provider changes signal Waybar to refresh.

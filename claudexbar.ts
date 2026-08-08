@@ -20,6 +20,10 @@ const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CLAUDE_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+const CLAUDE_SESSION_WINDOW_MS = 5 * 60 * 60 * 1000;
+// The API field is named seven_day, but the window is 72 hours. Verified against
+// /api/oauth/usage: a 168h window implies a start date before the account existed.
+const CLAUDE_WEEKLY_WINDOW_MS = 72 * 60 * 60 * 1000;
 const CLAUDE_CACHE_PATH = `${STATE_DIR}/claude-last-good.json`;
 const CLAUDE_BACKOFF_PATH = `${STATE_DIR}/claude-backoff.json`;
 const CLAUDE_MIN_BACKOFF_MS = 15 * 60 * 1000;
@@ -1127,8 +1131,8 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
     const sessionResetAt = parseEpochSecondsFromIso(sessionResetIso);
     const weeklyResetAt = parseEpochSecondsFromIso(weeklyResetIso);
 
-    const sessionPacing = calcPacing(sessionPct, sessionResetAt, 5 * 60 * 60 * 1000);
-    const weeklyPacing = calcPacing(weeklyPct, weeklyResetAt, 7 * 24 * 60 * 60 * 1000);
+    const sessionPacing = calcPacing(sessionPct, sessionResetAt, CLAUDE_SESSION_WINDOW_MS);
+    const weeklyPacing = calcPacing(weeklyPct, weeklyResetAt, CLAUDE_WEEKLY_WINDOW_MS);
 
     const cssClass = deriveCssClass(weeklyPct, weeklyPacing);
     const sessionCountdown = formatCountdown(sessionResetAt);

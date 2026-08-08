@@ -40,10 +40,16 @@ O(1) → ◉1% ⧖1% 6d22h
 | --- | --- |
 | `O` / `A` | OpenAI Codex / Anthropic Claude |
 | `(1)` | Available Codex free reset credits |
-| `↑ ↗ → ↘ ↓` | Usage pace versus elapsed quota-window time |
-| `◉1%` | Weekly utilization |
-| `⧖1%` | Elapsed weekly quota window |
-| `6d22h` | Time until weekly reset |
+| `↑ ↗ → ↘ ↓` | Usage pace: budget spent versus window time elapsed |
+| `◉1%` | Weekly budget used |
+| `⧖1%` | Weekly window time elapsed |
+| `6d22h` | Time until the weekly window resets |
+
+The menu bar summarizes the weekly window; session usage is in the dropdown.
+
+Read `◉` and `⧖` as a pair. `◉` is how much budget you have spent, `⧖` is how much of the window has passed, and the arrow compares them. `◉0% ⧖5%` means the window is 5% gone and you have spent nothing, so you are well under pace. When `◉` runs ahead of `⧖`, you are on track to exhaust the budget before the window resets.
+
+Window lengths differ by provider. Codex reports its own window length. Claude's weekly window is 72 hours, so its countdown never exceeds `2d23h`; the `6d22h` above is a Codex example. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how each provider supplies this.
 
 ## Install
 
