@@ -1,11 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import {
+    CLAUDE_WEEKLY_WINDOW_MS,
+    calcPacing,
     codexUsageToPayload,
     decodeMacOSKeychainSecret,
     formatCredits,
     parseCodexOAuthUsage,
     stampPayload,
 } from "./claudexbar";
+
+describe("Claude weekly pacing", () => {
+    test("uses the full seven-day window reported by Anthropic", () => {
+        const resetAt = (Date.now() + 67 * 60 * 60 * 1000) / 1000;
+        const pacing = calcPacing(2, resetAt, CLAUDE_WEEKLY_WINDOW_MS);
+
+        expect(pacing.timeElapsedPct).toBe(60);
+        expect(pacing.status).toBe("97% under");
+    });
+});
 
 describe("decodeMacOSKeychainSecret", () => {
     test("decodes hex-encoded Keychain data", () => {

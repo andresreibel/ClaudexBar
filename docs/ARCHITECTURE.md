@@ -32,9 +32,9 @@ It emits a Waybar-compatible JSON payload:
 Pacing needs a window length, because `⧖` reports how much of the window has elapsed. The two providers supply it differently:
 
 - Codex returns `limit_window_seconds` per window, so the engine uses the reported length.
-- Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (72 hours).
+- Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (7 days).
 
-Claude's weekly field is named `seven_day` but the window is 72 hours. Treating it as seven days places the window start days before a new account existed and overstates elapsed time. Verify any change to these constants against a live response: derive the implied start from `resets_at` minus the window and confirm it is a time the account could plausibly have been using.
+Claude's weekly field is named `seven_day` and resets on a fixed account schedule. The reset day and time do not change when a subscription begins, so pacing must use the full seven-day cycle even when the implied start predates a recent signup or upgrade.
 
 ## Linux adapter
 

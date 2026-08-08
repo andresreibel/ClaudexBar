@@ -21,9 +21,7 @@ const CLAUDE_TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
 const CLAUDE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CLAUDE_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const CLAUDE_SESSION_WINDOW_MS = 5 * 60 * 60 * 1000;
-// The API field is named seven_day, but the window is 72 hours. Verified against
-// /api/oauth/usage: a 168h window implies a start date before the account existed.
-const CLAUDE_WEEKLY_WINDOW_MS = 72 * 60 * 60 * 1000;
+export const CLAUDE_WEEKLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const CLAUDE_CACHE_PATH = `${STATE_DIR}/claude-last-good.json`;
 const CLAUDE_BACKOFF_PATH = `${STATE_DIR}/claude-backoff.json`;
 const CLAUDE_MIN_BACKOFF_MS = 15 * 60 * 1000;
@@ -427,7 +425,7 @@ function formatCountdown(resetAtEpochSeconds: number | null): string {
     return `${hours}h${String(minutes).padStart(2, "0")}m`;
 }
 
-function calcPacing(usagePct: number, resetAtEpochSeconds: number | null, windowMs: number | null): Pacing {
+export function calcPacing(usagePct: number, resetAtEpochSeconds: number | null, windowMs: number | null): Pacing {
     if (resetAtEpochSeconds == null || windowMs == null || windowMs <= 0) {
         return { icon: "→", status: "unknown pace", devPct: 0, timeElapsedPct: 0 };
     }
