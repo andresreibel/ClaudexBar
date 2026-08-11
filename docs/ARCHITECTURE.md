@@ -21,11 +21,12 @@ It emits a Waybar-compatible JSON payload:
   "tooltip": "Provider: Codex (oauth)\n...",
   "class": ["provider-codex"],
   "percentage": 9,
+  "percentageLabel": "Session",
   "resetCredits": 1
 }
 ```
 
-`resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
+`percentageLabel` identifies the quota window represented by the progress bar. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
 
 ## Quota windows
 
@@ -35,6 +36,10 @@ Pacing needs a window length, because `⧖` reports how much of the window has e
 - Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (7 days).
 
 Claude's weekly field is named `seven_day` and resets on a fixed account schedule. The reset day and time do not change when a subscription begins, so pacing must use the full seven-day cycle even when the implied start predates a recent signup or upgrade.
+
+## Severity policy
+
+The shared engine evaluates critical state before warning state. A weekly window is critical when it is more than 10% ahead of pace or at least 90% used. It is warning when it is more than 5% ahead of pace or at least 75% used. The platform adapters map warning to orange and critical to red.
 
 ## Linux adapter
 

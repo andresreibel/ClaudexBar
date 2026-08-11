@@ -52,6 +52,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let tooltip: String
     public let classes: [String]
     public let percentage: Double?
+    public let percentageLabel: String?
     public let resetCredits: Double?
     public let updatedAt: String?
 
@@ -60,15 +61,17 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         case tooltip
         case classes = "class"
         case percentage
+        case percentageLabel
         case resetCredits
         case updatedAt
     }
 
-    public init(text: String, tooltip: String, classes: [String] = [], percentage: Double? = nil, resetCredits: Double? = nil, updatedAt: String? = nil) {
+    public init(text: String, tooltip: String, classes: [String] = [], percentage: Double? = nil, percentageLabel: String? = nil, resetCredits: Double? = nil, updatedAt: String? = nil) {
         self.text = text
         self.tooltip = tooltip
         self.classes = classes
         self.percentage = percentage
+        self.percentageLabel = percentageLabel
         self.resetCredits = resetCredits
         self.updatedAt = updatedAt
     }
@@ -78,6 +81,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         text = try container.decode(String.self, forKey: .text)
         tooltip = try container.decode(String.self, forKey: .tooltip)
         percentage = try container.decodeIfPresent(Double.self, forKey: .percentage)
+        percentageLabel = try container.decodeIfPresent(String.self, forKey: .percentageLabel)
         resetCredits = try container.decodeIfPresent(Double.self, forKey: .resetCredits)
         updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
 

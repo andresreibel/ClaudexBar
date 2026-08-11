@@ -38,6 +38,7 @@ type WaybarPayload = {
     tooltip: string;
     class?: string | string[];
     percentage?: number;
+    percentageLabel?: string;
     resetCredits?: number;
     updatedAt?: string;
 };
@@ -210,6 +211,7 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
     }
 
     const percentage = toNumber(value.percentage) ?? undefined;
+    const percentageLabel = toStringValue(value.percentageLabel) ?? undefined;
     const resetCredits = toNumber(value.resetCredits) ?? undefined;
     const updatedAt = toStringValue(value.updatedAt) ?? undefined;
     return {
@@ -217,6 +219,7 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
         tooltip,
         class: cssClass,
         percentage,
+        percentageLabel,
         resetCredits,
         updatedAt,
     };
@@ -895,6 +898,7 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
         tooltip: tooltipLines.join("\n"),
         class: mergeClasses(cssClass, "provider-codex"),
         percentage: usage.sessionPct ?? usage.weeklyPct ?? undefined,
+        percentageLabel: usage.sessionPct == null ? "Weekly" : "Session",
         resetCredits: usage.resetCredits ?? undefined,
     });
 }
@@ -1152,6 +1156,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
         ].join("\n"),
         class: mergeClasses(cssClass, "provider-claude"),
         percentage: sessionPct,
+        percentageLabel: "Session",
     });
 
     await saveClaudeCachedPayload(payload);

@@ -71,6 +71,7 @@ describe("codexUsageToPayload", () => {
         const payload = codexUsageToPayload(usage);
 
         expect(payload.text).toContain("◉12%");
+        expect(payload.percentageLabel).toBe("Session");
         expect(payload.tooltip).toContain("Session: 12%");
         expect(payload.tooltip).toContain("Weekly: currently unavailable");
         expect(payload.tooltip).not.toContain("Weekly: null%");
@@ -91,8 +92,44 @@ describe("codexUsageToPayload", () => {
         const payload = codexUsageToPayload(usage);
 
         expect(payload.text).toContain("◉34%");
+        expect(payload.percentageLabel).toBe("Weekly");
         expect(payload.tooltip).toContain("Session: currently unavailable");
         expect(payload.tooltip).toContain("Weekly: 34%");
+    });
+
+    test("marks materially ahead-of-pace weekly usage critical", () => {
+        const payload = codexUsageToPayload({
+            sessionPct: null,
+            weeklyPct: 29,
+            sessionResetAt: null,
+            weeklyResetAt: (Date.now() + 5.25 * 24 * 60 * 60 * 1000) / 1000,
+            sessionWindowMinutes: null,
+            weeklyWindowMinutes: 7 * 24 * 60,
+            credits: null,
+            resetCredits: 0,
+            source: "oauth",
+            planType: "plus",
+        });
+
+        expect(payload.class).toEqual(["critical", "provider-codex"]);
+        expect(payload.percentageLabel).toBe("Weekly");
+    });
+
+    test("keeps near-exhausted weekly usage critical", () => {
+        const payload = codexUsageToPayload({
+            sessionPct: null,
+            weeklyPct: 90,
+            sessionResetAt: null,
+            weeklyResetAt: (Date.now() + 24 * 60 * 60 * 1000) / 1000,
+            sessionWindowMinutes: null,
+            weeklyWindowMinutes: 7 * 24 * 60,
+            credits: null,
+            resetCredits: 0,
+            source: "oauth",
+            planType: "plus",
+        });
+
+        expect(payload.class).toEqual(["critical", "provider-codex"]);
     });
 
     test("rejects OAuth usage when every window is unavailable", () => {

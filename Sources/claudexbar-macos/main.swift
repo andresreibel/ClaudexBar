@@ -253,8 +253,18 @@ private struct ClaudexBarMenu: View {
                         .foregroundStyle(model.statusColor)
 
                     if let percentage = payload.percentage {
-                        ProgressView(value: min(max(percentage, 0), 100), total: 100)
-                            .tint(model.statusColor)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(payload.percentageLabel ?? "Usage")
+                                Spacer()
+                                Text("\(percentage.formatted(.number.precision(.fractionLength(0...1))))%")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                            ProgressView(value: min(max(percentage, 0), 100), total: 100)
+                                .tint(model.statusColor)
+                        }
                     }
 
                     if let credits = payload.resetCredits {

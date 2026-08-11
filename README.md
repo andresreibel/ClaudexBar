@@ -49,6 +49,8 @@ The menu bar summarizes the weekly window; session usage is in the dropdown.
 
 Read `◉` and `⧖` as a pair. `◉` is how much budget you have spent, `⧖` is how much of the window has passed, and the arrow compares them. `◉0% ⧖5%` means the window is 5% gone and you have spent nothing, so you are well under pace. When `◉` runs ahead of `⧖`, you are on track to exhaust the budget before the window resets.
 
+The status colour reflects both total weekly usage and pace. Orange means more than 5% ahead of pace or at least 75% of the weekly budget used. Red means more than 10% ahead of pace or at least 90% used.
+
 Window lengths differ by provider. Codex reports its own window length. Claude's weekly window is seven days and resets on the account's assigned weekly schedule. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how each provider supplies this.
 
 ## Install
