@@ -26,6 +26,18 @@ const CLAUDE_CACHE_PATH = `${STATE_DIR}/claude-last-good.json`;
 const CLAUDE_BACKOFF_PATH = `${STATE_DIR}/claude-backoff.json`;
 const CLAUDE_MIN_BACKOFF_MS = 15 * 60 * 1000;
 
+// Quattro's omarchy-shell bar never re-runs a command widget's exec after an
+// onClick, only on its interval timer. The widget therefore runs on a short
+// interval (see shell.json) and this render cache keeps API calls at the old
+// ~5-minute cadence: each exec prints the cached payload for the current
+// provider unless it has gone stale.
+const RENDER_CACHE_TTL_MS = 5 * 60 * 1000;
+const RENDER_CACHE_ERROR_TTL_MS = 30 * 1000;
+
+function renderCachePath(provider: Provider): string {
+    return `${STATE_DIR}/render-${provider}.json`;
+}
+
 type Provider = typeof CLAUDE_PROVIDER | typeof CODEX_PROVIDER;
 
 type Args = {
@@ -225,6 +237,35 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
     };
 }
 
+function isErrorPayload(payload: WaybarPayload): boolean {
+    const klass = payload.class;
+    return klass == "error" || (Array.isArray(klass) && klass.includes("error"));
+}
+
+async function loadFreshRenderCache(provider: Provider): Promise<WaybarPayload | null> {
+    const parsed = await readJsonFile(renderCachePath(provider));
+    if (!isRecord(parsed)) {
+        return null;
+    }
+    const savedAtMs = toNumber(parsed.savedAtMs);
+    const payload = normalizeWaybarPayload(parsed.payload);
+    if (savedAtMs == null || !payload) {
+        return null;
+    }
+    const ttl = isErrorPayload(payload) ? RENDER_CACHE_ERROR_TTL_MS : RENDER_CACHE_TTL_MS;
+    if (Date.now() - savedAtMs > ttl) {
+        return null;
+    }
+    return payload;
+}
+
+async function saveRenderCache(provider: Provider, payload: WaybarPayload): Promise<void> {
+    await writeJsonFile(renderCachePath(provider), {
+        savedAtMs: Date.now(),
+        payload,
+    });
+}
+
 async function loadClaudeCachedPayload(): Promise<ClaudeCachedPayload | null> {
     const parsed = await readJsonFile(CLAUDE_CACHE_PATH);
     if (!isRecord(parsed)) {
@@ -308,6 +349,9 @@ async function runCommand(command: string, args: string[], timeoutMs: number): P
 }
 
 async function refreshWaybar(): Promise<void> {
+    // Waybar re-runs the module on this signal. The omarchy-shell bar has no
+    // equivalent; there the widget's short interval plus the primed render
+    // cache handle display refresh instead, and this pkill matches nothing.
     if (process.platform != "linux") {
         return;
     }
@@ -1201,6 +1245,17 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
     }
 }
 
+// Render the newly selected provider right away so the bar's next poll picks
+// up a fresh cache instead of showing the old provider while a live fetch runs.
+async function primeRenderCache(provider: Provider): Promise<void> {
+    try {
+        const payload = await renderClaudex(provider);
+        await saveRenderCache(provider, payload);
+    } catch {
+        // best effort; the periodic render will retry
+    }
+}
+
 async function main(): Promise<void> {
     const args = parseArgs(Bun.argv.slice(2));
 
@@ -1209,8 +1264,9 @@ async function main(): Promise<void> {
         const next = nextProvider(current);
         await writeProvider(next);
         if (!args.provider) {
-            await refreshWaybar();
             console.log(next);
+            await primeRenderCache(next);
+            await refreshWaybar();
             return;
         }
     }
@@ -1218,14 +1274,21 @@ async function main(): Promise<void> {
     if (args.provider) {
         await writeProvider(args.provider);
         if (!args.toggleProvider) {
-            await refreshWaybar();
             console.log(args.provider);
+            await primeRenderCache(args.provider);
+            await refreshWaybar();
             return;
         }
     }
 
     const provider = await readProvider();
+    const cached = await loadFreshRenderCache(provider);
+    if (cached) {
+        console.log(JSON.stringify(cached));
+        return;
+    }
     const payload = await renderClaudex(provider);
+    await saveRenderCache(provider, payload);
     console.log(JSON.stringify(payload));
 }
 
