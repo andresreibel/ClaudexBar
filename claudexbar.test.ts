@@ -5,8 +5,10 @@ import {
     codexUsageToPayload,
     decodeMacOSKeychainSecret,
     formatCredits,
+    compactLegacyTooltip,
     parseCodexOAuthUsage,
     stampPayload,
+    stripLegacyBarCountdown,
 } from "./claudexbar";
 
 describe("Claude weekly pacing", () => {
@@ -33,7 +35,21 @@ describe("stampPayload", () => {
     test("adds a machine-readable timestamp and subtle tooltip line", () => {
         const payload = stampPayload({ text: "O", tooltip: "Codex" }, Date.UTC(2026, 6, 11, 8, 10));
         expect(payload.updatedAt).toBe("2026-07-11T08:10:00.000Z");
-        expect(payload.tooltip).toContain("\n\nUpdated:");
+        expect(payload.tooltip).toContain("\nUpdated:");
+    });
+});
+
+describe("stripLegacyBarCountdown", () => {
+    test("removes the former reset suffix from cached payloads", () => {
+        expect(stripLegacyBarCountdown("A ↑ ◉78% ⧖66% 2d9h")).toBe("A ↑ ◉78% ⧖66%");
+        expect(stripLegacyBarCountdown("O ↑ ◉60% ⧖37% 4h10m")).toBe("O ↑ ◉60% ⧖37%");
+    });
+});
+
+describe("compactLegacyTooltip", () => {
+    test("compacts the former centred tooltip from cached payloads", () => {
+        expect(compactLegacyTooltip("ClaudexBar\n-----------\n\nSession: 2% (on track)\n  Resets in 4h55m\n\nWeekly: 78% (18% ahead)\n  Resets in 2d9h\n\nUpdated: 07:34 PM"))
+            .toBe("Session 2% (on track) · reset 4h55m\nWeekly 78% (18% ahead) · reset 2d9h\nUpdated: 07:34 PM");
     });
 });
 
@@ -52,7 +68,7 @@ describe("codexUsageToPayload", () => {
             planType: "plus",
         });
         expect(payload.updatedAt).toBeDefined();
-        expect(payload.tooltip).toContain("\n\nUpdated:");
+        expect(payload.tooltip).toContain("\nUpdated:");
         expect(payload.tooltip).not.toContain("Provider:");
     });
 
@@ -72,9 +88,27 @@ describe("codexUsageToPayload", () => {
 
         expect(payload.text).toContain("◉12%");
         expect(payload.percentageLabel).toBe("Session");
-        expect(payload.tooltip).toContain("Session: 12%");
-        expect(payload.tooltip).toContain("Weekly: currently unavailable");
-        expect(payload.tooltip).not.toContain("Weekly: null%");
+        expect(payload.tooltip).toContain("Session 12%");
+        expect(payload.tooltip).toContain("Weekly unavailable");
+        expect(payload.tooltip).not.toContain("Weekly null%");
+    });
+
+    test("keeps reset countdowns in the detail tooltip, not the compact bar text", () => {
+        const payload = codexUsageToPayload({
+            sessionPct: 12,
+            weeklyPct: 34,
+            sessionResetAt: (Date.now() + 2 * 60 * 60 * 1000) / 1000,
+            weeklyResetAt: (Date.now() + 2 * 24 * 60 * 60 * 1000) / 1000,
+            sessionWindowMinutes: 5 * 60,
+            weeklyWindowMinutes: 7 * 24 * 60,
+            credits: null,
+            resetCredits: null,
+            source: "oauth",
+            planType: "plus",
+        });
+
+        expect(payload.text).not.toMatch(/\b\d+d\d+h\b/);
+        expect(payload.tooltip).toContain("reset ");
     });
 
     test("recognizes a lone seven-day primary window as weekly usage", () => {
@@ -93,8 +127,8 @@ describe("codexUsageToPayload", () => {
 
         expect(payload.text).toContain("◉34%");
         expect(payload.percentageLabel).toBe("Weekly");
-        expect(payload.tooltip).toContain("Session: currently unavailable");
-        expect(payload.tooltip).toContain("Weekly: 34%");
+        expect(payload.tooltip).toContain("Session unavailable");
+        expect(payload.tooltip).toContain("Weekly 34%");
     });
 
     test("marks materially ahead-of-pace weekly usage critical", () => {

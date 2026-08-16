@@ -242,6 +242,18 @@ function isErrorPayload(payload: WaybarPayload): boolean {
     return klass == "error" || (Array.isArray(klass) && klass.includes("error"));
 }
 
+export function stripLegacyBarCountdown(text: string): string {
+    return text.replace(/\s+(?:\d+d\d+h|\d+h\d+m)$/, "");
+}
+
+export function compactLegacyTooltip(tooltip: string): string {
+    return tooltip
+        .replace(/^ClaudexBar\n-+\n\n?/, "")
+        .replace(/^Session:\s*(.+)\n\s*Resets in\s*(.+)$/m, "Session $1 · reset $2")
+        .replace(/^Weekly:\s*(.+)\n\s*Resets in\s*(.+)$/m, "Weekly $1 · reset $2")
+        .replace(/\n{2,}/g, "\n");
+}
+
 async function loadFreshRenderCache(provider: Provider): Promise<WaybarPayload | null> {
     const parsed = await readJsonFile(renderCachePath(provider));
     if (!isRecord(parsed)) {
@@ -256,7 +268,11 @@ async function loadFreshRenderCache(provider: Provider): Promise<WaybarPayload |
     if (Date.now() - savedAtMs > ttl) {
         return null;
     }
-    return payload;
+    return {
+        ...payload,
+        text: stripLegacyBarCountdown(payload.text),
+        tooltip: compactLegacyTooltip(payload.tooltip),
+    };
 }
 
 async function saveRenderCache(provider: Provider, payload: WaybarPayload): Promise<void> {
@@ -409,7 +425,7 @@ export function stampPayload(payload: WaybarPayload, updatedAtMs: number = Date.
     const updatedTime = updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return {
         ...payload,
-        tooltip: `${payload.tooltip}\n\nUpdated: ${updatedTime}`,
+        tooltip: `${payload.tooltip}\nUpdated: ${updatedTime}`,
         updatedAt: updatedAt.toISOString(),
     };
 }
@@ -417,7 +433,8 @@ export function stampPayload(payload: WaybarPayload, updatedAtMs: number = Date.
 function annotateCachedClaudePayload(payload: WaybarPayload, detail: string): WaybarPayload {
     return {
         ...payload,
-        tooltip: `${payload.tooltip}\n\nCached Claude usage\n${detail}`,
+        text: stripLegacyBarCountdown(payload.text),
+        tooltip: `${compactLegacyTooltip(payload.tooltip)}\nCached Claude usage\n${detail}`,
         class: mergeClasses(payload.class, "stale", "provider-claude"),
     };
 }
@@ -911,33 +928,27 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const creditLabel = usage.resetCredits == null ? null : formatCredits(usage.resetCredits);
     const providerBadge = creditLabel == null ? "O" : `O(${creditLabel})`;
 
-    const tooltipLines = [
-        "ClaudexBar",
-        "-----------",
-        "",
-    ];
+    const tooltipLines: string[] = [];
 
     if (usage.sessionPct != null && sessionPacing != null) {
-        tooltipLines.push(`Session: ${usage.sessionPct}% (${sessionPacing.status})`, `  Resets in ${sessionCountdown}`);
+        tooltipLines.push(`Session ${usage.sessionPct}% · ${sessionPacing.status} · reset ${sessionCountdown}`);
     } else {
-        tooltipLines.push("Session: currently unavailable");
+        tooltipLines.push("Session unavailable");
     }
 
-    tooltipLines.push("");
-
     if (usage.weeklyPct != null && weeklyPacing != null) {
-        tooltipLines.push(`Weekly: ${usage.weeklyPct}% (${weeklyPacing.status})`, `  Resets in ${weeklyCountdown}`);
+        tooltipLines.push(`Weekly ${usage.weeklyPct}% · ${weeklyPacing.status} · reset ${weeklyCountdown}`);
     } else {
-        tooltipLines.push("Weekly: currently unavailable");
+        tooltipLines.push("Weekly unavailable");
     }
 
     if (creditLabel != null) {
-        tooltipLines.push("", `Free reset credits: ${creditLabel}`);
+        tooltipLines.push(`Credits ${creditLabel}`);
     }
 
     return stampPayload({
         text: addProviderBadge(
-            `${displayedPacing.icon} ◉${displayedPct}% ⧖${displayedPacing.timeElapsedPct}% ${weeklyPacing == null ? sessionCountdown : weeklyCountdown}`,
+            `${displayedPacing.icon} ◉${displayedPct}% ⧖${displayedPacing.timeElapsedPct}%`,
             providerBadge),
         tooltip: tooltipLines.join("\n"),
         class: mergeClasses(cssClass, "provider-codex"),
@@ -1186,17 +1197,11 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
 
     const payload = stampPayload({
         text: addProviderBadge(
-            `${weeklyPacing.icon} ◉${weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}% ${weeklyCountdown}`,
+            `${weeklyPacing.icon} ◉${weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}%`,
             "A"),
         tooltip: [
-            "ClaudexBar",
-            "-----------",
-            "",
-            `Session: ${sessionPct}% (${sessionPacing.status})`,
-            `  Resets in ${sessionCountdown}`,
-            "",
-            `Weekly: ${weeklyPct}% (${weeklyPacing.status})`,
-            `  Resets in ${weeklyCountdown}`,
+            `Session ${sessionPct}% · ${sessionPacing.status} · reset ${sessionCountdown}`,
+            `Weekly ${weeklyPct}% · ${weeklyPacing.status} · reset ${weeklyCountdown}`,
         ].join("\n"),
         class: mergeClasses(cssClass, "provider-claude"),
         percentage: sessionPct,
@@ -1211,7 +1216,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
 function errorPayload(message: string): WaybarPayload {
     return stampPayload({
         text: "⚠ cdx",
-        tooltip: `ClaudexBar\n-----------\n${message}`,
+        tooltip: message,
         class: "error",
     });
 }

@@ -13,12 +13,12 @@ ClaudexBar is one product with a shared provider engine and thin platform adapte
 - Claude caching and rate-limit backoff.
 - Provider selection under `~/.codex/claudexbar/`.
 
-It emits a Waybar-compatible JSON payload:
+It emits a JSON payload consumed by the Quattro command widget and the optional Waybar adapter:
 
 ```json
 {
-  "text": "O(1) → ◉1% ⧖1% 6d22h",
-  "tooltip": "Provider: Codex (oauth)\n...",
+  "text": "O(1) → ◉1% ⧖1%",
+  "tooltip": "Session 2% · on track · reset 4h55m\nWeekly 78% · 18% ahead · reset 2d9h\nUpdated: 07:34 PM",
   "class": ["provider-codex"],
   "percentage": 9,
   "percentageLabel": "Session",
@@ -43,7 +43,7 @@ The shared engine evaluates critical state before warning state. A weekly window
 
 ## Linux adapter
 
-Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Waybar executes it every five minutes and consumes the JSON payload directly. Provider changes signal Waybar to refresh.
+Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Omarchy Quattro runs it as a command widget on a short interval and reads its five-minute render cache; the optional Waybar adapter runs it every five minutes and receives refresh signals on provider changes.
 
 ## macOS adapter
 
@@ -64,4 +64,4 @@ Credential values must never appear in tests, logs, screenshots, documentation, 
 
 ## Build and install
 
-`Makefile` builds the Swift release executable, generates the icon, creates the `.app` bundle, embeds the shared engine, and ad-hoc signs the bundle. `install.sh` selects this path on Darwin and the established CLI/Waybar path on Linux.
+`Makefile` builds the Swift release executable, generates the icon, creates the `.app` bundle, embeds the shared engine, and ad-hoc signs the bundle. `install.sh` selects this path on Darwin and installs the shared Linux engine; Quattro and optional Waybar supply the bar adapter.

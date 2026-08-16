@@ -6,7 +6,7 @@
 | Platform | What gets installed |
 | --- | --- |
 | **macOS** | Native SwiftUI menu-bar app at `/Applications/ClaudexBar.app` |
-| **Linux** | Waybar module powered by `~/.local/bin/claudexbar.ts` |
+| **Linux** | Shared engine at `~/.local/bin/claudexbar.ts`, used by an Omarchy Quattro command widget or optional Waybar integration |
 
 Both versions show the same Codex and Claude subscription limits. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; only the desktop interface differs.
 
@@ -33,7 +33,7 @@ The native macOS dropdown shows Codex or Claude session and weekly usage, reset 
 Example:
 
 ```text
-O(1) → ◉1% ⧖1% 6d22h
+O(1) → ◉1% ⧖1%
 ```
 
 | Part | Meaning |
@@ -43,9 +43,9 @@ O(1) → ◉1% ⧖1% 6d22h
 | `↑ ↗ → ↘ ↓` | Usage pace: budget spent versus window time elapsed |
 | `◉1%` | Weekly budget used |
 | `⧖1%` | Weekly window time elapsed |
-| `6d22h` | Time until the weekly window resets |
+| Detail view | Session and weekly reset countdowns |
 
-The menu bar summarizes the weekly window; session usage is in the dropdown.
+The menu bar summarizes the weekly window; session usage and reset countdowns stay in the detail view.
 
 Read `◉` and `⧖` as a pair. `◉` is how much budget you have spent, `⧖` is how much of the window has passed, and the arrow compares them. `◉0% ⧖5%` means the window is 5% gone and you have spent nothing, so you are well under pace. When `◉` runs ahead of `⧖`, you are on track to exhaust the budget before the window resets.
 
@@ -86,11 +86,27 @@ open /Applications/ClaudexBar.app
 
 The app is currently built from source and ad-hoc signed. There is no notarized downloadable build yet.
 
-### Linux / Waybar
+### Linux
+
+`./install.sh` installs the shared engine. On Omarchy Quattro, add it as a command widget in `~/.config/omarchy/shell.json`:
+
+```json
+{
+  "id": "claudexbar",
+  "type": "command",
+  "exec": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts",
+  "interval": 1,
+  "onClick": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts --toggle"
+}
+```
+
+The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Click to switch providers and hover for detail.
+
+### Optional Waybar integration
 
 ![ClaudexBar on Linux Waybar](screenshot-2026-02-17_00-41-59.png)
 
-Install Bun, then add the CLI plus shell and Waybar integrations:
+For a non-Omarchy Waybar setup, add the shell and Waybar integrations:
 
 ```sh
 ./install.sh --all
@@ -142,7 +158,7 @@ See [architecture](docs/ARCHITECTURE.md), [troubleshooting](docs/TROUBLESHOOTING
 - Codex free reset credits: verified against `rate_limit_reset_credits.available_count`.
 - Claude macOS Keychain discovery: verified.
 - Claude live usage: account-dependent; the current OAuth endpoint can reject organization-managed accounts.
-- Linux/Waybar: existing integration preserved; CI validates the shared engine and installer syntax.
+- Linux: Quattro command-widget and optional Waybar paths use the same shared engine; CI validates the engine and installer syntax.
 
 ## License
 

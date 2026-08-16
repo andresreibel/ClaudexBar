@@ -5,7 +5,7 @@
 ClaudexBar is one cross-platform product with one shared quota engine.
 
 - `claudexbar.ts` owns Codex/Claude auth, usage, pacing, caching, and payload behavior.
-- Linux uses the shared engine through the existing Waybar integration.
+- Linux uses the shared engine through an Omarchy Quattro command widget or the optional Waybar integration.
 - macOS uses a thin native SwiftUI menu-bar shell that bundles and invokes the same engine.
 - Keep platform-specific UI and installation code thin; do not duplicate provider logic in Swift.
 - `install.sh` must detect Darwin versus Linux and preserve existing Linux options and behavior.
