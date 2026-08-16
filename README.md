@@ -100,7 +100,7 @@ The app is currently built from source and ad-hoc signed. There is no notarized 
 }
 ```
 
-The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Click to switch providers and hover for detail.
+The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Click to switch providers and hover for compact session, weekly, reset, and refresh details. This uses Quattro's built-in command widget—no custom QML or plugin is required.
 
 ### Optional Waybar integration
 

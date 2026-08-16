@@ -43,7 +43,7 @@ The shared engine evaluates critical state before warning state. A weekly window
 
 ## Linux adapter
 
-Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Omarchy Quattro runs it as a command widget on a short interval and reads its five-minute render cache; the optional Waybar adapter runs it every five minutes and receives refresh signals on provider changes.
+Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Omarchy Quattro runs it as its built-in command widget on a short interval and reads its five-minute render cache. Its compact plain-text tooltip holds the session, weekly, reset, and refresh details; it needs no custom QML or plugin. The optional Waybar adapter runs it every five minutes and receives refresh signals on provider changes.
 
 ## macOS adapter
 

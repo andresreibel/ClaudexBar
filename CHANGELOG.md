@@ -5,6 +5,7 @@
 ### Fixed
 
 - Removed reset countdowns from the compact bar summary. Session and weekly reset times remain in the detail view, including cached Claude usage.
+- Compacted the Linux Quattro detail tooltip while retaining session, weekly, reset, and refresh information.
 - Claude weekly elapsed-window percentage and pace arrow. The `seven_day` usage field is a 72-hour window, not seven days, so the previous 7-day assumption reported a window that began days before the account existed and overstated elapsed time by roughly 13x.
 
 ## 0.3.0 - 2026-07-11

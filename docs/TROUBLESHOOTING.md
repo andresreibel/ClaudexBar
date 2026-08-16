@@ -35,6 +35,10 @@ Some organization-managed Claude accounts do not allow the Anthropic OAuth usage
 
 During temporary Claude failures or `429` backoff, ClaudexBar reuses the last valid Claude payload and marks it stale. Cache and backoff state live under `~/.codex/claudexbar/`.
 
+## Omarchy Quattro bar is missing or stale
+
+Ensure `~/.config/omarchy/shell.json` contains the documented `claudexbar` command widget with `"interval": 1`. The widget runs the installed engine every second, but the engine only fetches live usage about once per five minutes. Source updates take effect on the next run; restart the Omarchy shell only after changing the widget configuration.
+
 ## Rebuild the installed macOS app
 
 Do not test against a stale menu-bar process:
