@@ -33,18 +33,6 @@ public enum ClaudexBarSeverity: String, Sendable {
         case .normal, .stale, .error: nil
         }
     }
-
-    public var macOSStatusColorHex: String? {
-        switch self {
-        case .warning: "#ff9e64"
-        case .critical: "#ff453a"
-        case .normal, .stale, .error: nil
-        }
-    }
-
-    public static func isStatusAccentSymbol(_ character: Character) -> Bool {
-        "↑↗→↘↓".contains(character)
-    }
 }
 
 public struct ClaudexBarPayload: Decodable, Equatable, Sendable {

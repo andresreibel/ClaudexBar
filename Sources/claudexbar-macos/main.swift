@@ -203,19 +203,6 @@ private final class ClaudexBarModel: ObservableObject {
     }
 }
 
-private extension NSColor {
-    convenience init?(hex: String) {
-        let value = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard value.count == 6, let rgb = UInt64(value, radix: 16) else { return nil }
-        self.init(
-            red: CGFloat((rgb >> 16) & 0xff) / 255,
-            green: CGFloat((rgb >> 8) & 0xff) / 255,
-            blue: CGFloat(rgb & 0xff) / 255,
-            alpha: 1
-        )
-    }
-}
-
 private struct ClaudexBarMenu: View {
     @ObservedObject var model: ClaudexBarModel
 
@@ -380,9 +367,7 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
         guard let button = statusItem.button else { return }
 
         let title = model.menuBarText
-        let severity = model.payload?.severity ?? .normal
         let baseFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let accentFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         let attributedTitle = NSMutableAttributedString(
             string: title,
             attributes: [
@@ -390,15 +375,6 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
                 .font: baseFont,
             ]
         )
-        if let color = severity.macOSStatusColorHex.flatMap(NSColor.init(hex:)) {
-            for index in title.indices where ClaudexBarSeverity.isStatusAccentSymbol(title[index]) {
-                let nextIndex = title.index(after: index)
-                attributedTitle.addAttributes(
-                    [.foregroundColor: color, .font: accentFont],
-                    range: NSRange(index..<nextIndex, in: title)
-                )
-            }
-        }
         button.attributedTitle = attributedTitle
         button.toolTip = model.payload?.tooltip ?? model.errorMessage ?? "ClaudexBar"
         button.setAccessibilityLabel("ClaudexBar, \(title)")

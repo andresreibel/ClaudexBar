@@ -29,19 +29,12 @@ import Testing
     #expect(ClaudexBarProvider.claude.badge == "A")
 }
 
-@Test func menuBarColorsMatchLinuxWaybar() {
+@Test func linuxStatusColorsMatchWaybar() {
     #expect(ClaudexBarSeverity.warning.linuxStatusColorHex == "#ff9e64")
     #expect(ClaudexBarSeverity.critical.linuxStatusColorHex == "#f7768e")
     #expect(ClaudexBarSeverity.normal.linuxStatusColorHex == nil)
     #expect(ClaudexBarSeverity.stale.linuxStatusColorHex == nil)
     #expect(ClaudexBarSeverity.error.linuxStatusColorHex == nil)
-    #expect(ClaudexBarSeverity.warning.macOSStatusColorHex == "#ff9e64")
-    #expect(ClaudexBarSeverity.critical.macOSStatusColorHex == "#ff453a")
-    #expect(ClaudexBarSeverity.isStatusAccentSymbol("↑"))
-    #expect(!ClaudexBarSeverity.isStatusAccentSymbol("◉"))
-    #expect(!ClaudexBarSeverity.isStatusAccentSymbol("⧖"))
-    #expect(!ClaudexBarSeverity.isStatusAccentSymbol("O"))
-    #expect(!ClaudexBarSeverity.isStatusAccentSymbol("1"))
 }
 
 @Test func removesDuplicatedHeaderFromMacOSDetailOnly() {
