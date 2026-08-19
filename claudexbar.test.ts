@@ -19,6 +19,25 @@ describe("Claude weekly pacing", () => {
         expect(pacing.timeElapsedPct).toBe(60);
         expect(pacing.status).toBe("97% under");
     });
+
+    test("maps the displayed rounded delta to horizontal, diagonal, and vertical arrows", () => {
+        const windowMs = 100 * 60 * 1000;
+        const resetAt = (Date.now() + 50 * 60 * 1000) / 1000;
+        const cases = [
+            { delta: -10, icon: "↓", status: "10% under" },
+            { delta: -9, icon: "↘", status: "9% under" },
+            { delta: -1, icon: "↘", status: "1% under" },
+            { delta: 0, icon: "→", status: "on track" },
+            { delta: 1, icon: "↗", status: "1% ahead" },
+            { delta: 9, icon: "↗", status: "9% ahead" },
+            { delta: 10, icon: "↑", status: "10% ahead" },
+        ];
+
+        for (const { delta, icon, status } of cases) {
+            const pacing = calcPacing(50 * (1 + delta / 100), resetAt, windowMs);
+            expect(pacing).toEqual({ icon, status, devPct: delta, timeElapsedPct: 50 });
+        }
+    });
 });
 
 describe("decodeMacOSKeychainSecret", () => {

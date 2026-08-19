@@ -40,7 +40,7 @@ O(1) → ◉1% ⧖1%
 | --- | --- |
 | `O` / `A` | OpenAI Codex / Anthropic Claude |
 | `(1)` | Available Codex free reset credits |
-| `↑ ↗ → ↘ ↓` | Usage pace: budget spent versus window time elapsed |
+| `↑ ↗ → ↘ ↓` | Rounded pace delta: vertical at 10% or more, diagonal from 1% to 9%, horizontal at 0%; up is ahead and down is under |
 | `◉1%` | Weekly budget used |
 | `⧖1%` | Weekly window time elapsed |
 | Detail view | Session and weekly reset countdowns |

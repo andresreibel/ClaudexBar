@@ -498,25 +498,22 @@ export function calcPacing(usagePct: number, resetAtEpochSeconds: number | null,
     const startAtMs = resetAtMs - windowMs;
     const elapsedPct = clamp(Math.round(((Date.now() - startAtMs) / windowMs) * 100), 0, 100);
     const pacing = elapsedPct > 0 ? usagePct / elapsedPct : 0;
+    const devPct = Math.round((pacing - 1) * 100);
 
-    if (pacing > 1.10) {
-        const delta = Math.round((pacing - 1) * 100);
-        return { icon: "↑", status: `${delta}% ahead`, devPct: delta, timeElapsedPct: elapsedPct };
+    if (devPct >= 10) {
+        return { icon: "↑", status: `${devPct}% ahead`, devPct, timeElapsedPct: elapsedPct };
     }
-    if (pacing > 1.05) {
-        const delta = Math.round((pacing - 1) * 100);
-        return { icon: "↗", status: `${delta}% ahead`, devPct: delta, timeElapsedPct: elapsedPct };
+    if (devPct > 0) {
+        return { icon: "↗", status: `${devPct}% ahead`, devPct, timeElapsedPct: elapsedPct };
     }
-    if (pacing < 0.90) {
-        const delta = Math.round((1 - pacing) * 100);
-        return { icon: "↓", status: `${delta}% under`, devPct: -delta, timeElapsedPct: elapsedPct };
+    if (devPct <= -10) {
+        return { icon: "↓", status: `${-devPct}% under`, devPct, timeElapsedPct: elapsedPct };
     }
-    if (pacing < 0.95) {
-        const delta = Math.round((1 - pacing) * 100);
-        return { icon: "↘", status: `${delta}% under`, devPct: -delta, timeElapsedPct: elapsedPct };
+    if (devPct < 0) {
+        return { icon: "↘", status: `${-devPct}% under`, devPct, timeElapsedPct: elapsedPct };
     }
 
-    return { icon: "→", status: "on track", devPct: 0, timeElapsedPct: elapsedPct };
+    return { icon: "→", status: "on track", devPct, timeElapsedPct: elapsedPct };
 }
 
 function deriveCssClass(weeklyPct: number, weeklyPacing: Pacing): string {

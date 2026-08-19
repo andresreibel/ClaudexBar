@@ -130,10 +130,6 @@ private final class ClaudexBarModel: ObservableObject {
         }
     }
 
-    var menuBarText: String {
-        if isRefreshing, payload == nil { return "cdx …" }
-        return payload?.text ?? "cdx"
-    }
 
     var statusColor: Color {
         switch payload?.severity {
@@ -338,19 +334,17 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
         }
 
         model.$payload
-            .combineLatest(model.$isRefreshing)
-            .sink { [weak self] _, _ in
-                self?.updateStatusItem()
+            .combineLatest(model.$isRefreshing, model.$errorMessage)
+            .sink { [weak self] values in
+                let (payload, isRefreshing, errorMessage) = values
+                self?.updateStatusItem(
+                    payload: payload,
+                    isRefreshing: isRefreshing,
+                    errorMessage: errorMessage
+                )
             }
             .store(in: &cancellables)
 
-        model.$errorMessage
-            .sink { [weak self] _ in
-                self?.updateStatusItem()
-            }
-            .store(in: &cancellables)
-
-        updateStatusItem()
         Task { await model.refresh() }
     }
 
@@ -363,10 +357,19 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
         }
     }
 
-    private func updateStatusItem() {
+    private func updateStatusItem(
+        payload: ClaudexBarPayload?,
+        isRefreshing: Bool,
+        errorMessage: String?
+    ) {
         guard let button = statusItem.button else { return }
 
-        let title = model.menuBarText
+        let title: String
+        if isRefreshing, payload == nil {
+            title = "cdx …"
+        } else {
+            title = payload?.text ?? "cdx"
+        }
         let baseFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let attributedTitle = NSMutableAttributedString(
             string: title,
@@ -376,7 +379,7 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
             ]
         )
         button.attributedTitle = attributedTitle
-        button.toolTip = model.payload?.tooltip ?? model.errorMessage ?? "ClaudexBar"
+        button.toolTip = payload?.tooltip ?? errorMessage ?? "ClaudexBar"
         button.setAccessibilityLabel("ClaudexBar, \(title)")
     }
 }
