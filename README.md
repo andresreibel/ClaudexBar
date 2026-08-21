@@ -14,14 +14,14 @@ Both versions show the same Codex and Claude subscription limits. One shared Typ
 
 ![ClaudexBar running natively on macOS](assets/claudexbar-macos.png)
 
-The native macOS dropdown shows Codex or Claude session and weekly usage, reset countdowns, available Codex reset credits, and the most recent refresh time. The menu-bar summary stays visible while you work.
+The native macOS dropdown shows OpenAI (Codex) or Anthropic (Claude) session and weekly usage, reset countdowns, available OpenAI reset credits, and the most recent refresh time. The menu-bar summary stays visible while you work.
 
 ## Features
 
-- Codex and Claude provider switching.
-- Session and weekly utilization with reset countdowns.
-- Pace indicators showing whether usage is ahead of or under the current quota window.
-- Codex free reset-credit count in the menu bar and macOS dropdown.
+- Stable OpenAI and Anthropic switching: selection updates immediately while the dropdown and menu-bar anchor remain stationary during loading.
+- Compact session and week utilization rows with reset countdowns.
+- Warning or critical labels only on the quota window that triggered them.
+- OpenAI free reset-credit count in the menu bar and macOS dropdown.
 - Five-minute refresh, manual refresh, caching, and rate-limit backoff.
 - Subtle last-updated time in the macOS dropdown and Linux tooltip.
 - Native macOS launch-at-login control.
@@ -43,9 +43,11 @@ O(1) → ◉1% ⧖1%
 | `↑ ↗ → ↘ ↓` | Rounded pace delta: vertical at 10% or more, diagonal from 1% to 9%, horizontal at 0%; up is ahead and down is under |
 | `◉1%` | Weekly budget used |
 | `⧖1%` | Weekly window time elapsed |
-| Detail view | Session and weekly reset countdowns |
+| Detail view | Compact session and week reset countdowns, plus warning or critical on the affected row |
 
 The menu bar summarizes the weekly window; session usage and reset countdowns stay in the detail view.
+Normal quota rows omit pacing prose such as `on track`, `under`, or `ahead`.
+On macOS, the dropdown remains 390 × 350 points while provider usage loads.
 
 Read `◉` and `⧖` as a pair. `◉` is how much budget you have spent, `⧖` is how much of the window has passed, and the arrow compares them. `◉0% ⧖5%` means the window is 5% gone and you have spent nothing, so you are well under pace. When `◉` runs ahead of `⧖`, you are on track to exhaust the budget before the window resets.
 

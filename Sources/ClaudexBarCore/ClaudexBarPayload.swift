@@ -6,8 +6,8 @@ public enum ClaudexBarProvider: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .codex: "Codex"
-        case .claude: "Claude"
+        case .codex: "OpenAI"
+        case .claude: "Anthropic"
         }
     }
 

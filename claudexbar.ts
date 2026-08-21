@@ -249,8 +249,13 @@ export function stripLegacyBarCountdown(text: string): string {
 export function compactLegacyTooltip(tooltip: string): string {
     return tooltip
         .replace(/^ClaudexBar\n-+\n\n?/, "")
-        .replace(/^Session:\s*(.+)\n\s*Resets in\s*(.+)$/m, "Session $1 · reset $2")
-        .replace(/^Weekly:\s*(.+)\n\s*Resets in\s*(.+)$/m, "Weekly $1 · reset $2")
+        .replace(/^(Session|Weekly):\s*(\d+(?:\.\d+)?%)\s*(?:\([^)]*\))?\n\s*Resets in\s*(.+)$/gm,
+            (_, label: string, percentage: string, reset: string) =>
+                `${label == "Weekly" ? "Week" : label} ${percentage} · reset ${reset}`)
+        .replace(/^(Session|Weekly) (\d+(?:\.\d+)?%) · (?:on track|\d+% (?:under|ahead)|unknown pace) · reset (.+)$/gm,
+            (_, label: string, percentage: string, reset: string) =>
+                `${label == "Weekly" ? "Week" : label} ${percentage} · reset ${reset}`)
+        .replace(/^Weekly unavailable$/gm, "Week unavailable")
         .replace(/\n{2,}/g, "\n");
 }
 
@@ -434,7 +439,7 @@ function annotateCachedClaudePayload(payload: WaybarPayload, detail: string): Wa
     return {
         ...payload,
         text: stripLegacyBarCountdown(payload.text),
-        tooltip: `${compactLegacyTooltip(payload.tooltip)}\nCached Claude usage\n${detail}`,
+        tooltip: `${compactLegacyTooltip(payload.tooltip)}\nStale · cached Anthropic usage\n${detail}`,
         class: mergeClasses(payload.class, "stale", "provider-claude"),
     };
 }
@@ -526,6 +531,16 @@ function deriveCssClass(weeklyPct: number, weeklyPacing: Pacing): string {
         return "warning";
     }
     return "";
+}
+
+function formatQuotaRow(
+    label: "Session" | "Week",
+    percentage: number,
+    reset: string,
+    severity: string = "",
+): string {
+    const warning = severity == "warning" || severity == "critical" ? ` · ${severity}` : "";
+    return `${label} ${percentage}%${warning} · reset ${reset}`;
 }
 
 function parseIsoDate(value: string | null): Date | null {
@@ -926,17 +941,19 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const providerBadge = creditLabel == null ? "O" : `O(${creditLabel})`;
 
     const tooltipLines: string[] = [];
+    const sessionSeverity = usage.weeklyPct == null ? cssClass : "";
+    const weeklySeverity = usage.weeklyPct == null ? "" : cssClass;
 
     if (usage.sessionPct != null && sessionPacing != null) {
-        tooltipLines.push(`Session ${usage.sessionPct}% · ${sessionPacing.status} · reset ${sessionCountdown}`);
+        tooltipLines.push(formatQuotaRow("Session", usage.sessionPct, sessionCountdown, sessionSeverity));
     } else {
         tooltipLines.push("Session unavailable");
     }
 
     if (usage.weeklyPct != null && weeklyPacing != null) {
-        tooltipLines.push(`Weekly ${usage.weeklyPct}% · ${weeklyPacing.status} · reset ${weeklyCountdown}`);
+        tooltipLines.push(formatQuotaRow("Week", usage.weeklyPct, weeklyCountdown, weeklySeverity));
     } else {
-        tooltipLines.push("Weekly unavailable");
+        tooltipLines.push("Week unavailable");
     }
 
     if (creditLabel != null) {
@@ -1197,8 +1214,8 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
             `${weeklyPacing.icon} ◉${weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}%`,
             "A"),
         tooltip: [
-            `Session ${sessionPct}% · ${sessionPacing.status} · reset ${sessionCountdown}`,
-            `Weekly ${weeklyPct}% · ${weeklyPacing.status} · reset ${weeklyCountdown}`,
+            formatQuotaRow("Session", sessionPct, sessionCountdown),
+            formatQuotaRow("Week", weeklyPct, weeklyCountdown, cssClass),
         ].join("\n"),
         class: mergeClasses(cssClass, "provider-claude"),
         percentage: sessionPct,

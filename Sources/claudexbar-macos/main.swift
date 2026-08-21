@@ -72,7 +72,10 @@ private struct EngineRunner: Sendable {
     }
 
     func select(_ provider: ClaudexBarProvider) async throws {
-        _ = try await run(arguments: ["--provider", provider.rawValue])
+        let output = try await run(arguments: ["--provider", provider.rawValue])
+        guard output == provider.rawValue else {
+            throw EngineError.invalidOutput(output)
+        }
     }
 
     private func run(arguments: [String]) async throws -> String {
@@ -157,18 +160,48 @@ private final class ClaudexBarModel: ObservableObject {
     }
 
     func select(_ nextProvider: ClaudexBarProvider) async {
-        guard nextProvider != provider else { return }
+        guard !isRefreshing, nextProvider != provider else { return }
+
+        let previousProvider = provider
+        let previousPayload = payload
+        provider = nextProvider
+        payload = nil
+        errorMessage = nil
         isRefreshing = true
         defer { isRefreshing = false }
 
+        let runner: EngineRunner
         do {
-            let runner = try EngineRunner.resolve()
+            runner = try EngineRunner.resolve()
+        } catch {
+            provider = previousProvider
+            payload = previousPayload
+            errorMessage = "Couldn't switch to \(nextProvider.displayName)."
+            return
+        }
+
+        do {
             try await runner.select(nextProvider)
-            provider = nextProvider
-            payload = try await runner.payload()
+        } catch {
+            let persistedProvider = Self.readProvider()
+            guard persistedProvider == nextProvider else {
+                provider = persistedProvider
+                payload = persistedProvider == previousProvider ? previousPayload : nil
+                errorMessage = "Couldn't switch to \(nextProvider.displayName)."
+                return
+            }
+        }
+
+        do {
+            let nextPayload = try await runner.payload()
+            guard nextPayload.severity != .error else {
+                errorMessage = "Unable to load \(nextProvider.displayName) usage."
+                return
+            }
+            payload = nextPayload
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Unable to load \(nextProvider.displayName) usage."
         }
     }
 
@@ -228,6 +261,7 @@ private struct ClaudexBarMenu: View {
                 }
             }
             .pickerStyle(.segmented)
+            .disabled(model.isRefreshing)
 
             if let payload = model.payload {
                 VStack(alignment: .leading, spacing: 8) {
@@ -271,17 +305,20 @@ private struct ClaudexBarMenu: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-            } else {
-                Text(model.errorMessage ?? "Loading usage…")
+            } else if model.errorMessage == nil {
+                Text("Loading usage…")
                     .font(.caption)
-                    .foregroundStyle(model.errorMessage == nil ? Color.secondary : Color.red)
+                    .foregroundStyle(.secondary)
             }
 
-            if let errorMessage = model.errorMessage, model.payload != nil {
+            if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+
+
+            Spacer(minLength: 0)
 
             Divider()
 
@@ -305,7 +342,7 @@ private struct ClaudexBarMenu: View {
             }
         }
         .padding(16)
-        .frame(width: 390)
+        .frame(width: 390, height: 350, alignment: .topLeading)
         .task {
             await model.refresh()
         }
@@ -315,8 +352,9 @@ private struct ClaudexBarMenu: View {
 @MainActor
 private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let model = ClaudexBarModel()
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let statusItem = NSStatusBar.system.statusItem(withLength: 150)
     private let popover = NSPopover()
+    private var lastStatusTitle = "cdx"
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -334,14 +372,9 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
         }
 
         model.$payload
-            .combineLatest(model.$isRefreshing, model.$errorMessage)
-            .sink { [weak self] values in
-                let (payload, isRefreshing, errorMessage) = values
-                self?.updateStatusItem(
-                    payload: payload,
-                    isRefreshing: isRefreshing,
-                    errorMessage: errorMessage
-                )
+            .combineLatest(model.$errorMessage)
+            .sink { [weak self] payload, errorMessage in
+                self?.updateStatusItem(payload: payload, errorMessage: errorMessage)
             }
             .store(in: &cancellables)
 
@@ -357,19 +390,21 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
         }
     }
 
+    func popoverDidClose(_ notification: Notification) {
+        updateStatusItem(payload: model.payload, errorMessage: model.errorMessage)
+    }
+
     private func updateStatusItem(
         payload: ClaudexBarPayload?,
-        isRefreshing: Bool,
         errorMessage: String?
     ) {
         guard let button = statusItem.button else { return }
 
-        let title: String
-        if isRefreshing, payload == nil {
-            title = "cdx …"
-        } else {
-            title = payload?.text ?? "cdx"
+        if let payload {
+            lastStatusTitle = payload.text
         }
+        guard !popover.isShown else { return }
+        let title = payload?.text ?? lastStatusTitle
         let baseFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let attributedTitle = NSMutableAttributedString(
             string: title,

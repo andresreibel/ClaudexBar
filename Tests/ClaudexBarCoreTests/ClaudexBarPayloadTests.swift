@@ -25,6 +25,8 @@ import Testing
 }
 
 @Test func providerMetadataMatchesSharedEngine() {
+    #expect(ClaudexBarProvider.codex.displayName == "OpenAI")
+    #expect(ClaudexBarProvider.claude.displayName == "Anthropic")
     #expect(ClaudexBarProvider.codex.badge == "O")
     #expect(ClaudexBarProvider.claude.badge == "A")
 }

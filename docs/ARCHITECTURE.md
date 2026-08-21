@@ -17,16 +17,16 @@ It emits a JSON payload consumed by the Quattro command widget and the optional 
 
 ```json
 {
-  "text": "O(1) → ◉1% ⧖1%",
-  "tooltip": "Session 2% · on track · reset 4h55m\nWeekly 78% · 18% ahead · reset 2d9h\nUpdated: 07:34 PM",
-  "class": ["provider-codex"],
-  "percentage": 9,
+  "text": "O(1) ↑ ◉78% ⧖60%",
+  "tooltip": "Session 2% · reset 4h55m\nWeek 78% · warning · reset 2d9h\nUpdated: 07:34 PM",
+  "class": ["warning", "provider-codex"],
+  "percentage": 2,
   "percentageLabel": "Session",
   "resetCredits": 1
 }
 ```
 
-`percentageLabel` identifies the quota window represented by the progress bar. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
+`percentageLabel` identifies the quota window represented by the progress bar. The shared tooltip omits normal pacing prose and appends `warning` or `critical` only to the quota window that triggered that severity. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
 
 ## Quota windows
 
@@ -53,6 +53,8 @@ The Swift package contains:
 - `claudexbar-macos`: native SwiftUI `MenuBarExtra`, refresh scheduling, provider switching, launch-at-login, and shared-engine process execution.
 
 The packaged app bundles `claudexbar.ts` under `Contents/Resources`. The Swift app locates Bun, invokes the bundled engine off the main actor, decodes the payload, and renders it. Provider logic is not duplicated in Swift.
+
+The macOS picker displays OpenAI and Anthropic while preserving the engine's `codex` and `claude` identifiers. Selection updates immediately, clears the previous provider's usage, and shows a loading indicator until the new payload arrives.
 
 ## Credentials
 

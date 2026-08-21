@@ -68,7 +68,7 @@ describe("stripLegacyBarCountdown", () => {
 describe("compactLegacyTooltip", () => {
     test("compacts the former centred tooltip from cached payloads", () => {
         expect(compactLegacyTooltip("ClaudexBar\n-----------\n\nSession: 2% (on track)\n  Resets in 4h55m\n\nWeekly: 78% (18% ahead)\n  Resets in 2d9h\n\nUpdated: 07:34 PM"))
-            .toBe("Session 2% (on track) · reset 4h55m\nWeekly 78% (18% ahead) · reset 2d9h\nUpdated: 07:34 PM");
+            .toBe("Session 2% · reset 4h55m\nWeek 78% · reset 2d9h\nUpdated: 07:34 PM");
     });
 });
 
@@ -108,8 +108,8 @@ describe("codexUsageToPayload", () => {
         expect(payload.text).toContain("◉12%");
         expect(payload.percentageLabel).toBe("Session");
         expect(payload.tooltip).toContain("Session 12%");
-        expect(payload.tooltip).toContain("Weekly unavailable");
-        expect(payload.tooltip).not.toContain("Weekly null%");
+        expect(payload.tooltip).toContain("Week unavailable");
+        expect(payload.tooltip).not.toContain("Week null%");
     });
 
     test("keeps reset countdowns in the detail tooltip, not the compact bar text", () => {
@@ -130,6 +130,39 @@ describe("codexUsageToPayload", () => {
         expect(payload.tooltip).toContain("reset ");
     });
 
+    test("omits normal pacing prose and annotates only the warning window", () => {
+        const normal = codexUsageToPayload({
+            sessionPct: 12,
+            weeklyPct: 34,
+            sessionResetAt: (Date.now() + 2 * 60 * 60 * 1000) / 1000,
+            weeklyResetAt: (Date.now() + 2 * 24 * 60 * 60 * 1000) / 1000,
+            sessionWindowMinutes: 5 * 60,
+            weeklyWindowMinutes: 7 * 24 * 60,
+            credits: null,
+            resetCredits: null,
+            source: "oauth",
+            planType: "plus",
+        });
+        expect(normal.tooltip).toMatch(/^Session 12% · reset .+\nWeek 34% · reset .+\nUpdated:/);
+        expect(normal.tooltip).not.toMatch(/on track|under|ahead/);
+
+        const warning = codexUsageToPayload({
+            sessionPct: 12,
+            weeklyPct: 76,
+            sessionResetAt: (Date.now() + 2 * 60 * 60 * 1000) / 1000,
+            weeklyResetAt: (Date.now() + 1.75 * 24 * 60 * 60 * 1000) / 1000,
+            sessionWindowMinutes: 5 * 60,
+            weeklyWindowMinutes: 7 * 24 * 60,
+            credits: null,
+            resetCredits: null,
+            source: "oauth",
+            planType: "plus",
+        });
+        expect(warning.class).toEqual(["warning", "provider-codex"]);
+        expect(warning.tooltip).toContain("Week 76% · warning · reset ");
+        expect(warning.tooltip).not.toContain("Session 12% · warning");
+    });
+
     test("recognizes a lone seven-day primary window as weekly usage", () => {
         const usage = parseCodexOAuthUsage({
             rate_limit: {
@@ -147,7 +180,7 @@ describe("codexUsageToPayload", () => {
         expect(payload.text).toContain("◉34%");
         expect(payload.percentageLabel).toBe("Weekly");
         expect(payload.tooltip).toContain("Session unavailable");
-        expect(payload.tooltip).toContain("Weekly 34%");
+        expect(payload.tooltip).toContain("Week 34%");
     });
 
     test("marks materially ahead-of-pace weekly usage critical", () => {
@@ -166,6 +199,7 @@ describe("codexUsageToPayload", () => {
 
         expect(payload.class).toEqual(["critical", "provider-codex"]);
         expect(payload.percentageLabel).toBe("Weekly");
+        expect(payload.tooltip).toContain("Week 29% · critical · reset ");
     });
 
     test("keeps near-exhausted weekly usage critical", () => {
