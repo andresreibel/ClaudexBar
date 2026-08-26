@@ -2,7 +2,6 @@ import AppKit
 import ClaudexBarCore
 import Combine
 import Foundation
-import ServiceManagement
 import SwiftUI
 
 private enum EngineError: LocalizedError {
@@ -120,7 +119,6 @@ private final class ClaudexBarModel: ObservableObject {
     @Published var payload: ClaudexBarPayload?
     @Published var errorMessage: String?
     @Published var isRefreshing = false
-    @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     private var timer: Timer?
 
@@ -202,21 +200,6 @@ private final class ClaudexBarModel: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "Unable to load \(nextProvider.displayName) usage."
-        }
-    }
-
-    func setLaunchAtLogin(_ enabled: Bool) {
-        do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-            launchAtLogin = SMAppService.mainApp.status == .enabled
-            errorMessage = nil
-        } catch {
-            launchAtLogin = SMAppService.mainApp.status == .enabled
-            errorMessage = "Launch at login: \(error.localizedDescription)"
         }
     }
 
@@ -317,7 +300,6 @@ private struct ClaudexBarMenu: View {
                     .foregroundStyle(.red)
             }
 
-
             Spacer(minLength: 0)
 
             Divider()
@@ -327,12 +309,6 @@ private struct ClaudexBarMenu: View {
                     Task { await model.refresh() }
                 }
                 .disabled(model.isRefreshing)
-
-                Toggle("Launch at Login", isOn: Binding(
-                    get: { model.launchAtLogin },
-                    set: { model.setLaunchAtLogin($0) }
-                ))
-                .toggleStyle(.checkbox)
 
                 Spacer()
 
