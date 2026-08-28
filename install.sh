@@ -133,7 +133,9 @@ cdxmenu() {
     echo "1) toggle provider"
     echo "2) provider -> claude"
     echo "3) provider -> codex"
-    echo "4) refresh -> waybar"
+    echo "4) provider -> grok"
+    echo "5) sign in / reconnect grok"
+    echo "6) refresh -> waybar"
     echo "q) quit"
     echo ""
     read -rp "Select: " choice
@@ -141,7 +143,9 @@ cdxmenu() {
       1) claudex --toggle ;;
       2) claudex --provider claude ;;
       3) claudex --provider codex ;;
-      4) pkill -RTMIN+11 waybar 2>/dev/null || true ;;
+      4) claudex --provider grok ;;
+      5) claudex --login grok ;;
+      6) pkill -RTMIN+11 waybar 2>/dev/null || true ;;
       q|Q) break ;;
       *) echo "Invalid choice" ;;
     esac

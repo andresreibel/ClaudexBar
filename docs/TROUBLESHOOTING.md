@@ -27,6 +27,10 @@ Run `codex login`, then refresh ClaudexBar.
 
 Sign in with Claude Code. Linux expects `~/.claude/.credentials.json`; macOS can also read the `Claude Code-credentials` Keychain item.
 
+## Missing or expired SpaceXAI sign-in
+
+Select SpaceXAI and click **Sign in / reconnect SpaceXAI**. ClaudexBar opens the Cursor sign-in page only for that explicit action, stores the returned credentials at `~/.codex/claudexbar/grok-auth.json` with mode `0600`, then refreshes the Grok meter. If usage later reports that sign-in is required, reconnect; normal refreshes never open the browser automatically.
+
 ## Claude usage returns `403`
 
 Some organization-managed Claude accounts do not allow the Anthropic OAuth usage endpoint. ClaudexBar will show the provider error without affecting Codex. Use an account that permits OAuth usage or wait for a supported alternative usage source.

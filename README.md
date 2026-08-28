@@ -8,17 +8,17 @@
 | **macOS** | Native SwiftUI menu-bar app at `/Applications/ClaudexBar.app` |
 | **Linux** | Shared engine at `~/.local/bin/claudexbar.ts`, used by an Omarchy Quattro command widget or optional Waybar integration |
 
-Both versions show the same Codex and Claude subscription limits. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; only the desktop interface differs.
+Both versions show the same Codex, Claude, and SpaceXAI (Grok) subscription limits. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; only the desktop interface differs.
 
 ### macOS menu-bar app
 
 ![ClaudexBar running natively on macOS](assets/claudexbar-macos.png)
 
-The native macOS dropdown shows OpenAI (Codex) or Anthropic (Claude) session and weekly usage, reset countdowns, available OpenAI reset credits, and the most recent refresh time. The menu-bar summary stays visible while you work.
+The native macOS dropdown shows OpenAI (Codex), Anthropic (Claude), or SpaceXAI (Grok) usage, reset countdowns, available OpenAI reset credits, and the most recent refresh time. The menu-bar summary stays visible while you work.
 
 ## Features
 
-- Stable OpenAI and Anthropic switching: selection updates immediately while the dropdown and menu-bar anchor remain stationary during loading.
+- Stable OpenAI, Anthropic, and SpaceXAI switching: selection updates immediately while the dropdown and menu-bar anchor remain stationary during loading.
 - Compact session and week utilization rows with reset countdowns.
 - Warning or critical labels only on the quota window that triggered them.
 - OpenAI free reset-credit count in the menu bar and macOS dropdown.
@@ -38,7 +38,7 @@ O(1) → ◉1% ⧖1%
 
 | Part | Meaning |
 | --- | --- |
-| `O` / `A` | OpenAI Codex / Anthropic Claude |
+| `O` / `A` / `G` | OpenAI Codex / Anthropic Claude / SpaceXAI Grok |
 | `(1)` | Available Codex free reset credits |
 | `↑ ↗ → ↘ ↓` | Rounded pace delta: vertical at 10% or more, diagonal from 1% to 9%, horizontal at 0%; up is ahead and down is under |
 | `◉1%` | Weekly budget used |
@@ -53,7 +53,7 @@ Read `◉` and `⧖` as a pair. `◉` is how much budget you have spent, `⧖` i
 
 The macOS menu-bar summary uses the standard adaptive system label color. Linux Waybar keeps its status colors: orange means more than 5% ahead of pace or at least 75% of the weekly budget used; red means more than 10% ahead of pace or at least 90% used.
 
-Window lengths differ by provider. Codex reports its own window length. Claude's weekly window is seven days and resets on the account's assigned weekly schedule. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how each provider supplies this.
+Window lengths differ by provider. Codex reports its own window length. Claude's weekly window is seven days and resets on the account's assigned weekly schedule. SpaceXAI's Grok meter reports the weekly percentage and next reset time. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how each provider supplies this.
 
 ## Install
 
@@ -128,18 +128,21 @@ claudex
 claudex --toggle
 claudex --provider claude
 claudex --provider codex
+claudex --provider grok
+claudex --login grok
 ```
 
 ## Authentication and state
 
-ClaudexBar reuses existing CLI credentials; it never stores credentials in the repository or application bundle.
+ClaudexBar keeps credentials outside the repository and application bundle. It reuses existing Codex and Claude CLI credentials and stores its own Grok sign-in:
 
 - Codex: `~/.codex/auth.json`.
 - Claude on Linux: `~/.claude/.credentials.json`.
 - Claude on macOS: the credentials file when present, otherwise the `Claude Code-credentials` Keychain item.
+- SpaceXAI: `~/.codex/claudexbar/grok-auth.json`, created with mode `0600` only after the explicit **Sign in / reconnect SpaceXAI** action.
 - Provider selection and caches: `~/.codex/claudexbar/`.
 
-The shared engine may refresh existing OAuth credentials when required. Some Anthropic organizations reject the OAuth usage endpoint with `403`; see [troubleshooting](docs/TROUBLESHOOTING.md).
+The shared engine may refresh existing Codex or Claude OAuth credentials when required. SpaceXAI uses its own explicit PKCE sign-in and never opens a browser during normal refresh or provider switching; expired Grok credentials require **Sign in / reconnect SpaceXAI**. Some Anthropic organizations reject the OAuth usage endpoint with `403`; see [troubleshooting](docs/TROUBLESHOOTING.md).
 
 ## Development
 
@@ -159,6 +162,7 @@ See [architecture](docs/ARCHITECTURE.md), [troubleshooting](docs/TROUBLESHOOTING
 - macOS native app: built, installed, signed, launched, and live Codex usage verified.
 - Codex free reset credits: verified against `rate_limit_reset_credits.available_count`.
 - Claude macOS Keychain discovery: verified.
+- SpaceXAI login and live Cursor-backed Grok weekly usage: verified in the installed macOS app.
 - Claude live usage: account-dependent; the current OAuth endpoint can reject organization-managed accounts.
 - Linux: Quattro command-widget and optional Waybar paths use the same shared engine; CI validates the engine and installer syntax.
 

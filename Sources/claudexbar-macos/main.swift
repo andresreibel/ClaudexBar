@@ -77,6 +77,13 @@ private struct EngineRunner: Sendable {
         }
     }
 
+    func signInGrok() async throws {
+        let output = try await run(arguments: ["--login", "grok"])
+        guard output == "grok" else {
+            throw EngineError.invalidOutput(output)
+        }
+    }
+
     private func run(arguments: [String]) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
             let process = Process()
@@ -203,6 +210,26 @@ private final class ClaudexBarModel: ObservableObject {
         }
     }
 
+    func signInGrok() async {
+        guard provider == .grok, !isRefreshing else { return }
+        isRefreshing = true
+        errorMessage = nil
+        defer { isRefreshing = false }
+
+        do {
+            let runner = try EngineRunner.resolve()
+            try await runner.signInGrok()
+            let nextPayload = try await runner.payload()
+            guard nextPayload.severity != .error else {
+                errorMessage = "Unable to load SpaceXAI usage."
+                return
+            }
+            payload = nextPayload
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private static func readProvider() -> ClaudexBarProvider {
         let path = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/claudexbar/provider")
@@ -298,6 +325,13 @@ private struct ClaudexBarMenu: View {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
+            }
+
+            if model.provider == .grok {
+                Button("Sign in / reconnect SpaceXAI") {
+                    Task { await model.signInGrok() }
+                }
+                .disabled(model.isRefreshing)
             }
 
             Spacer(minLength: 0)

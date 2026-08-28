@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, bounded Cursor-backed weekly usage/reset requests, and redacted reconnect guidance.
+
 ### Fixed
 
 - Removed reset countdowns from the compact bar summary. Session and weekly reset times remain in the detail view, including cached Claude usage.

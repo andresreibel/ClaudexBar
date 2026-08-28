@@ -6,7 +6,7 @@ ClaudexBar is one product with a shared provider engine and thin platform adapte
 
 `claudexbar.ts` owns:
 
-- Codex and Claude credential loading and refresh.
+- Codex and Claude credential loading, plus SpaceXAI PKCE sign-in and private credential storage.
 - Provider usage requests and Codex RPC fallback.
 - Session and weekly quota parsing.
 - Pacing, warning state, reset countdowns, and reset-credit formatting.
@@ -30,10 +30,11 @@ It emits a JSON payload consumed by the Quattro command widget and the optional 
 
 ## Quota windows
 
-Pacing needs a window length, because `⧖` reports how much of the window has elapsed. The two providers supply it differently:
+Pacing needs a window length, because `⧖` reports how much of the window has elapsed. The three providers supply it differently:
 
 - Codex returns `limit_window_seconds` per window, so the engine uses the reported length.
 - Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (7 days).
+- SpaceXAI's Cursor-backed `GetSandUsageStatus` Connect endpoint returns `usagePercent` and `nextResetTimestampUtc`; the engine maps them into the shared weekly payload shape and uses a seven-day pacing window.
 
 Claude's weekly field is named `seven_day` and resets on a fixed account schedule. The reset day and time do not change when a subscription begins, so pacing must use the full seven-day cycle even when the implied start predates a recent signup or upgrade.
 
@@ -54,13 +55,14 @@ The Swift package contains:
 
 The packaged app bundles `claudexbar.ts` under `Contents/Resources`. The Swift app locates Bun, invokes the bundled engine off the main actor, decodes the payload, and renders it. Provider logic is not duplicated in Swift.
 
-The macOS picker displays OpenAI and Anthropic while preserving the engine's `codex` and `claude` identifiers. Selection updates immediately, clears the previous provider's usage, and shows a loading indicator until the new payload arrives.
+The macOS picker displays OpenAI, Anthropic, and SpaceXAI while preserving the engine's `codex`, `claude`, and `grok` identifiers. Selection updates immediately, clears the previous provider's usage, and shows a loading indicator until the new payload arrives.
 
 ## Credentials
 
 - Codex uses `~/.codex/auth.json`.
 - Claude uses `~/.claude/.credentials.json` when available.
 - On macOS, Claude falls back to the `Claude Code-credentials` Keychain item.
+- SpaceXAI uses ClaudexBar-owned `~/.codex/claudexbar/grok-auth.json`, written atomically with mode `0600` after an explicit PKCE sign-in. The browser opens only for that user action; normal refreshes never initiate login. Grok usage requests have a 10-second timeout, and missing or rejected credentials require explicit reconnection.
 
 Credential values must never appear in tests, logs, screenshots, documentation, or Git history.
 

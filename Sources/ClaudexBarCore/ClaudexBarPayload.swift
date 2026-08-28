@@ -3,11 +3,13 @@ import Foundation
 public enum ClaudexBarProvider: String, CaseIterable, Codable, Sendable {
     case codex
     case claude
+    case grok
 
     public var displayName: String {
         switch self {
         case .codex: "OpenAI"
         case .claude: "Anthropic"
+        case .grok: "SpaceXAI"
         }
     }
 
@@ -15,6 +17,7 @@ public enum ClaudexBarProvider: String, CaseIterable, Codable, Sendable {
         switch self {
         case .codex: "O"
         case .claude: "A"
+        case .grok: "G"
         }
     }
 }

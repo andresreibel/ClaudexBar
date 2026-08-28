@@ -24,11 +24,23 @@ import Testing
     #expect(payload.severity == .critical)
 }
 
+@Test func decodesGrokWeeklyPayload() throws {
+    let data = Data(#"{"text":"G → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly"}"#.utf8)
+    let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
+
+    #expect(payload.classes == ["provider-grok"])
+    #expect(payload.percentage == 42)
+    #expect(payload.percentageLabel == "Weekly")
+    #expect(payload.severity == .normal)
+}
+
 @Test func providerMetadataMatchesSharedEngine() {
     #expect(ClaudexBarProvider.codex.displayName == "OpenAI")
     #expect(ClaudexBarProvider.claude.displayName == "Anthropic")
+    #expect(ClaudexBarProvider.grok.displayName == "SpaceXAI")
     #expect(ClaudexBarProvider.codex.badge == "O")
     #expect(ClaudexBarProvider.claude.badge == "A")
+    #expect(ClaudexBarProvider.grok.badge == "G")
 }
 
 @Test func linuxStatusColorsMatchWaybar() {

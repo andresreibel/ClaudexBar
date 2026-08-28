@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { dirname } from "node:path";
 
 const HOME = homedir();
 const STATE_DIR = `${HOME}/.codex/claudexbar`;
@@ -10,9 +12,18 @@ const PROVIDER_STATE_PATH = `${STATE_DIR}/provider`;
 
 const CLAUDE_PROVIDER = "claude";
 const CODEX_PROVIDER = "codex";
+const GROK_PROVIDER = "grok";
 
 const CODEX_AUTH_PATH = `${HOME}/.codex/auth.json`;
 const CODEX_CONFIG_PATH = `${HOME}/.codex/config.toml`;
+
+const GROK_AUTH_PATH = `${STATE_DIR}/grok-auth.json`;
+const GROK_LOGIN_URL = "https://cursor.com/loginDeepControl";
+const GROK_AUTH_POLL_URL = "https://api2.cursor.sh/auth/poll";
+const GROK_USAGE_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus";
+const GROK_AUTH_ERROR = "Grok sign-in required. Sign in or reconnect Grok.";
+const GROK_WEEKLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const GROK_LOGIN_TIMEOUT_MS = 2 * 60 * 1000;
 
 const CLAUDE_CREDS_PATH = `${HOME}/.claude/.credentials.json`;
 const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
@@ -38,11 +49,12 @@ function renderCachePath(provider: Provider): string {
     return `${STATE_DIR}/render-${provider}.json`;
 }
 
-type Provider = typeof CLAUDE_PROVIDER | typeof CODEX_PROVIDER;
+export type Provider = typeof CLAUDE_PROVIDER | typeof CODEX_PROVIDER | typeof GROK_PROVIDER;
 
 type Args = {
     provider: Provider | null;
     toggleProvider: boolean;
+    loginGrok: boolean;
 };
 
 type WaybarPayload = {
@@ -89,6 +101,34 @@ export type CodexUsageSnapshot = {
     resetCredits: number | null;
     source: "oauth" | "rpc";
     planType: string | null;
+};
+
+export type GrokUsageSnapshot = {
+    weeklyPct: number;
+    weeklyResetAt: number;
+    weeklyWindowMs: number;
+};
+
+type GrokCredentials = {
+    accessToken: string;
+    refreshToken: string;
+};
+
+type GrokUsageDependencies = {
+    authPath?: string;
+    usageUrl?: string;
+    fetchImpl?: typeof fetch;
+};
+
+type GrokLoginDependencies = {
+    authPath?: string;
+    pollUrl?: string;
+    fetchImpl?: typeof fetch;
+    openBrowser?: (url: string) => Promise<void>;
+    sleep?: (ms: number) => Promise<void>;
+    nowMs?: () => number;
+    uuid?: () => string;
+    verifier?: () => string;
 };
 
 type CodexAuth = {
@@ -147,6 +187,7 @@ function clamp(value: number, min: number, max: number): number {
 function parseArgs(argv: string[]): Args {
     let provider: Provider | null = null;
     let toggleProvider = false;
+    let loginGrok = false;
 
     for (let idx = 0; idx < argv.length; idx += 1) {
         const arg = argv[idx];
@@ -154,9 +195,14 @@ function parseArgs(argv: string[]): Args {
             toggleProvider = true;
             continue;
         }
+        if (arg == "--login" && argv[idx + 1] == GROK_PROVIDER) {
+            loginGrok = true;
+            idx += 1;
+            continue;
+        }
         if (arg == "--provider") {
             const next = argv[idx + 1];
-            if (next == CLAUDE_PROVIDER || next == CODEX_PROVIDER) {
+            if (next == CLAUDE_PROVIDER || next == CODEX_PROVIDER || next == GROK_PROVIDER) {
                 provider = next;
                 idx += 1;
             }
@@ -167,6 +213,7 @@ function parseArgs(argv: string[]): Args {
     return {
         provider,
         toggleProvider,
+        loginGrok,
     };
 }
 
@@ -177,7 +224,7 @@ async function ensureStateDir(): Promise<void> {
 async function readProvider(): Promise<Provider> {
     try {
         const value = (await readFile(PROVIDER_STATE_PATH, "utf8")).trim();
-        if (value == CLAUDE_PROVIDER || value == CODEX_PROVIDER) {
+        if (value == CLAUDE_PROVIDER || value == CODEX_PROVIDER || value == GROK_PROVIDER) {
             return value;
         }
     } catch {
@@ -335,8 +382,14 @@ async function clearClaudeBackoff(): Promise<void> {
     });
 }
 
-function nextProvider(provider: Provider): Provider {
-    return provider == CODEX_PROVIDER ? CLAUDE_PROVIDER : CODEX_PROVIDER;
+export function nextProvider(provider: Provider): Provider {
+    if (provider == CODEX_PROVIDER) {
+        return CLAUDE_PROVIDER;
+    }
+    if (provider == CLAUDE_PROVIDER) {
+        return GROK_PROVIDER;
+    }
+    return CODEX_PROVIDER;
 }
 
 async function runCommand(command: string, args: string[], timeoutMs: number): Promise<SpawnResult> {
@@ -972,6 +1025,166 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     });
 }
 
+async function loadGrokCredentials(authPath: string): Promise<GrokCredentials> {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(await readFile(authPath, "utf8"));
+    } catch {
+        throw new Error(GROK_AUTH_ERROR);
+    }
+    if (!isRecord(parsed)) {
+        throw new Error(GROK_AUTH_ERROR);
+    }
+    const accessToken = toStringValue(parsed.accessToken);
+    const refreshToken = toStringValue(parsed.refreshToken);
+    if (!accessToken || !refreshToken) {
+        throw new Error(GROK_AUTH_ERROR);
+    }
+    return { accessToken, refreshToken };
+}
+
+async function saveGrokCredentials(authPath: string, credentials: GrokCredentials): Promise<void> {
+    await mkdir(dirname(authPath), { recursive: true, mode: 0o700 });
+    const temporaryPath = `${authPath}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(temporaryPath, JSON.stringify(credentials), { encoding: "utf8", mode: 0o600 });
+    await chmod(temporaryPath, 0o600);
+    await rename(temporaryPath, authPath);
+    await chmod(authPath, 0o600);
+}
+
+async function openLoginBrowser(url: string): Promise<void> {
+    const command = process.platform == "darwin" ? "open" : "xdg-open";
+    const result = await runCommand(command, [url], 10_000);
+    if (result.code != 0) {
+        throw new Error("Could not open Grok sign-in.");
+    }
+}
+
+export async function loginGrok(dependencies: GrokLoginDependencies = {}): Promise<void> {
+    const verifier = dependencies.verifier?.() ?? randomBytes(32).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const uuid = dependencies.uuid?.() ?? randomUUID();
+    const loginUrl = new URL(GROK_LOGIN_URL);
+    loginUrl.searchParams.set("challenge", challenge);
+    loginUrl.searchParams.set("uuid", uuid);
+    loginUrl.searchParams.set("mode", "login");
+    loginUrl.searchParams.set("redirectTarget", "sand");
+    loginUrl.searchParams.set("supportsSelectedTeamLogin", "true");
+
+    await (dependencies.openBrowser ?? openLoginBrowser)(loginUrl.toString());
+
+    const fetchImpl = dependencies.fetchImpl ?? fetch;
+    const sleep = dependencies.sleep ?? ((ms: number) => Bun.sleep(ms));
+    const nowMs = dependencies.nowMs ?? Date.now;
+    const deadline = nowMs() + GROK_LOGIN_TIMEOUT_MS;
+    const pollUrl = new URL(dependencies.pollUrl ?? GROK_AUTH_POLL_URL);
+    pollUrl.searchParams.set("uuid", uuid);
+    pollUrl.searchParams.set("verifier", verifier);
+
+    while (nowMs() < deadline) {
+        let response: Response | null = null;
+        try {
+            response = await fetchImpl(pollUrl, {
+                method: "GET",
+                headers: { Accept: "application/json" },
+                signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, deadline - nowMs()))),
+            });
+        } catch {
+            // Keep polling until the bounded deadline.
+        }
+
+        if (response?.ok) {
+            let body: unknown = null;
+            try {
+                body = await response.json();
+            } catch {
+                // An incomplete poll response is not a completed login.
+            }
+            if (isRecord(body)) {
+                const accessToken = toStringValue(body.accessToken);
+                const refreshToken = toStringValue(body.refreshToken);
+                if (accessToken && refreshToken) {
+                    await saveGrokCredentials(dependencies.authPath ?? GROK_AUTH_PATH, {
+                        accessToken,
+                        refreshToken,
+                    });
+                    return;
+                }
+            }
+        }
+        await sleep(1_000);
+    }
+    throw new Error("Grok sign-in timed out. Try again.");
+}
+
+export function parseGrokUsage(raw: unknown): GrokUsageSnapshot {
+    if (!isRecord(raw) || typeof raw.usagePercent != "number"
+        || !Number.isFinite(raw.usagePercent)
+        || raw.usagePercent < 0 || raw.usagePercent > 100
+        || typeof raw.nextResetTimestampUtc != "string") {
+        throw new Error("Invalid Grok usage response");
+    }
+    const resetAtMs = Date.parse(raw.nextResetTimestampUtc);
+    if (!Number.isFinite(resetAtMs)) {
+        throw new Error("Invalid Grok usage response");
+    }
+    return {
+        weeklyPct: Math.round(raw.usagePercent),
+        weeklyResetAt: Math.round(resetAtMs / 1000),
+        weeklyWindowMs: GROK_WEEKLY_WINDOW_MS,
+    };
+}
+
+export function grokUsageToPayload(usage: GrokUsageSnapshot): WaybarPayload {
+    const pacing = calcPacing(usage.weeklyPct, usage.weeklyResetAt, usage.weeklyWindowMs);
+    const cssClass = deriveCssClass(usage.weeklyPct, pacing);
+    return stampPayload({
+        text: addProviderBadge(
+            `${pacing.icon} ◉${usage.weeklyPct}% ⧖${pacing.timeElapsedPct}%`,
+            "G"),
+        tooltip: formatQuotaRow("Week", usage.weeklyPct, formatCountdown(usage.weeklyResetAt), cssClass),
+        class: mergeClasses(cssClass, "provider-grok"),
+        percentage: usage.weeklyPct,
+        percentageLabel: "Weekly",
+    });
+}
+
+export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {}): Promise<WaybarPayload> {
+    const credentials = await loadGrokCredentials(dependencies.authPath ?? GROK_AUTH_PATH);
+    let response: Response;
+    try {
+        response = await (dependencies.fetchImpl ?? fetch)(
+            dependencies.usageUrl ?? GROK_USAGE_URL,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${credentials.accessToken}`,
+                    "Content-Type": "application/json",
+                    "Connect-Protocol-Version": "1",
+                },
+                body: "{}",
+                signal: AbortSignal.timeout(10_000),
+            },
+        );
+    } catch {
+        throw new Error("Grok usage request failed");
+    }
+    if (response.status == 401) {
+        throw new Error(GROK_AUTH_ERROR);
+    }
+    if (!response.ok) {
+        throw new Error(`Grok usage request failed (HTTP ${response.status})`);
+    }
+
+    let body: unknown;
+    try {
+        body = await response.json();
+    } catch {
+        throw new Error("Invalid Grok usage response");
+    }
+    return grokUsageToPayload(parseGrokUsage(body));
+}
+
 type ClaudeOAuth = {
     raw: JSONRecord;
     oauth: JSONRecord;
@@ -1249,6 +1462,19 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
         }
     }
 
+    if (provider == GROK_PROVIDER) {
+        try {
+            return await fetchGrokPayload();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Grok usage request failed";
+            return stampPayload({
+                text: "⚠ G",
+                tooltip: message,
+                class: ["error", "provider-grok"],
+            });
+        }
+    }
+
     try {
         const usage = await fetchCodexUsageViaOAuth();
         return codexUsageToPayload(usage);
@@ -1277,6 +1503,19 @@ async function primeRenderCache(provider: Provider): Promise<void> {
 
 async function main(): Promise<void> {
     const args = parseArgs(Bun.argv.slice(2));
+
+    if (args.loginGrok) {
+        try {
+            await loginGrok();
+            await primeRenderCache(GROK_PROVIDER);
+            console.log(GROK_PROVIDER);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Grok sign-in failed. Try again.";
+            console.error(message);
+            process.exitCode = 1;
+        }
+        return;
+    }
 
     if (args.toggleProvider) {
         const current = await readProvider();
