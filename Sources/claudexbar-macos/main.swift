@@ -3,6 +3,12 @@ import ClaudexBarCore
 import Combine
 import Foundation
 import SwiftUI
+private let cosmicOrange = Color(
+    red: 1.0,
+    green: 158.0 / 255.0,
+    blue: 100.0 / 255.0
+)
+
 
 private enum EngineError: LocalizedError {
     case missingBun
@@ -143,7 +149,7 @@ private final class ClaudexBarModel: ObservableObject {
         switch payload?.severity {
         case .error: .red
         case .critical: .red
-        case .warning: .orange
+        case .warning: cosmicOrange
         case .stale: .yellow
         case .normal, nil: .primary
         }
@@ -285,6 +291,7 @@ private struct ClaudexBarMenu: View {
                                 label: payload.percentageLabel ?? "Usage",
                                 percentage: percentage,
                                 resetText: nil,
+                                pacing: nil,
                                 tint: model.statusColor
                             )
                         }
@@ -294,6 +301,7 @@ private struct ClaudexBarMenu: View {
                                 label: row.label,
                                 percentage: row.percentage,
                                 resetText: row.resetText,
+                                pacing: row.pacing,
                                 tint: usageColor(for: row.severity)
                             )
                         }
@@ -360,7 +368,7 @@ private struct ClaudexBarMenu: View {
             }
         }
         .padding(16)
-        .frame(width: 390, height: 440, alignment: .topLeading)
+        .frame(width: 390, height: 500, alignment: .topLeading)
         .task {
             await model.refresh()
         }
@@ -369,7 +377,7 @@ private struct ClaudexBarMenu: View {
     private func usageColor(for severity: ClaudexBarSeverity) -> Color {
         switch severity {
         case .critical, .error: .red
-        case .warning: .orange
+        case .warning: cosmicOrange
         case .normal, .stale: .accentColor
         }
     }
@@ -378,19 +386,40 @@ private struct ClaudexBarMenu: View {
         label: String,
         percentage: Double,
         resetText: String?,
+        pacing: ClaudexBarUsagePacing?,
         tint: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
             HStack {
-                Text(label)
+                Text("Actual")
                 Spacer()
-                Text("\(percentage.formatted(.number.precision(.fractionLength(0...1))))%")
+                Text("\(formatPercentage(percentage))%")
             }
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(.secondary)
 
             ProgressView(value: min(max(percentage, 0), 100), total: 100)
                 .tint(tint)
+
+            if let pacing {
+                HStack {
+                    Text("Expected")
+                    Spacer()
+                    Text("\(formatPercentage(pacing.expectedPercentage))%")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                ProgressView(
+                    value: min(max(pacing.expectedPercentage, 0), 100),
+                    total: 100
+                )
+                .tint(Color.secondary)
+            }
 
             if let resetText {
                 Text("Resets in \(resetText)")
@@ -398,6 +427,10 @@ private struct ClaudexBarMenu: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    private func formatPercentage(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)))
     }
 }
 

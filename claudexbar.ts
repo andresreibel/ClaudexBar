@@ -58,11 +58,16 @@ type Args = {
     loginGrok: boolean;
 };
 
+type UsageRowPacing = {
+    expectedPercentage: number;
+};
+
 type UsageRow = {
     label: string;
     percentage: number;
     resetText: string;
     severity: "normal" | "warning" | "critical";
+    pacing?: UsageRowPacing;
 };
 
 type WaybarPayload = {
@@ -118,9 +123,11 @@ export type GrokUsageSnapshot = {
     weeklyResetAt: number;
     weeklyWindowMs: number;
 };
+
 export type CursorMonthlyUsageSnapshot = {
     cursorModelsPct: number;
     otherModelsPct: number;
+    monthlyStartAt: number;
     monthlyResetAt: number;
 };
 
@@ -298,7 +305,11 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
             && typeof row.percentage == "number" && Number.isFinite(row.percentage)
             && row.percentage >= 0 && row.percentage <= 100
             && typeof row.resetText == "string" && row.resetText.length > 0
-            && (row.severity == "normal" || row.severity == "warning" || row.severity == "critical"))
+            && (row.severity == "normal" || row.severity == "warning" || row.severity == "critical")
+            && (row.pacing == null || (isRecord(row.pacing)
+                && typeof row.pacing.expectedPercentage == "number"
+                && Number.isFinite(row.pacing.expectedPercentage)
+                && row.pacing.expectedPercentage >= 0 && row.pacing.expectedPercentage <= 100)))
         ? value.usageRows as UsageRow[]
         : undefined;
     const authenticationRequired = typeof value.authenticationRequired == "boolean"
@@ -607,17 +618,17 @@ export function calcPacing(usagePct: number, resetAtEpochSeconds: number | null,
     return { icon: "→", status: "on track", devPct, timeElapsedPct: elapsedPct };
 }
 
-function deriveCssClass(weeklyPct: number, weeklyPacing: Pacing): string {
-    const elapsed = weeklyPacing.timeElapsedPct > 0 ? weeklyPacing.timeElapsedPct : 1;
-    const pace = weeklyPct / elapsed;
-    if (pace > 1.10 || weeklyPct >= 90) {
+function deriveCssClass(usagePct: number, quotaPacing: Pacing): string {
+    const expectedPct = quotaPacing.timeElapsedPct;
+    if (usagePct <= expectedPct) {
+        return "";
+    }
+    if (expectedPct <= 0 || usagePct / expectedPct >= 1.10) {
         return "critical";
     }
-    if (pace > 1.05 || weeklyPct >= 75) {
-        return "warning";
-    }
-    return "";
+    return "warning";
 }
+
 
 function formatQuotaRow(
     label: "Session" | "Week",
@@ -1027,8 +1038,12 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const providerBadge = creditLabel == null ? "O" : `O(${creditLabel})`;
 
     const tooltipLines: string[] = [];
-    const sessionSeverity = usage.weeklyPct == null ? cssClass : "";
-    const weeklySeverity = usage.weeklyPct == null ? "" : cssClass;
+    const sessionSeverity = usage.sessionPct == null || sessionPacing == null
+        ? ""
+        : deriveCssClass(usage.sessionPct, sessionPacing);
+    const weeklySeverity = usage.weeklyPct == null || weeklyPacing == null
+        ? ""
+        : deriveCssClass(usage.weeklyPct, weeklyPacing);
     const usageRows: UsageRow[] = [];
     if (usage.sessionPct != null) {
         usageRows.push({
@@ -1036,6 +1051,9 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
             percentage: usage.sessionPct,
             resetText: sessionCountdown,
             severity: sessionSeverity == "warning" || sessionSeverity == "critical" ? sessionSeverity : "normal",
+            pacing: sessionPacing == null
+                ? undefined
+                : { expectedPercentage: sessionPacing.timeElapsedPct },
         });
     }
     if (usage.weeklyPct != null) {
@@ -1044,9 +1062,11 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
             percentage: usage.weeklyPct,
             resetText: weeklyCountdown,
             severity: weeklySeverity == "warning" || weeklySeverity == "critical" ? weeklySeverity : "normal",
+            pacing: weeklyPacing == null
+                ? undefined
+                : { expectedPercentage: weeklyPacing.timeElapsedPct },
         });
     }
-
 
     if (usage.sessionPct != null && sessionPacing != null) {
         tooltipLines.push(formatQuotaRow("Session", usage.sessionPct, sessionCountdown, sessionSeverity));
@@ -1192,25 +1212,29 @@ export function parseCursorMonthlyUsage(raw: unknown): CursorMonthlyUsageSnapsho
     }
     const cursorModelsPct = raw.planUsage.autoPercentUsed;
     const otherModelsPct = raw.planUsage.apiPercentUsed;
+    const billingCycleStart = raw.billingCycleStart;
     const billingCycleEnd = raw.billingCycleEnd;
     if (typeof cursorModelsPct != "number" || !Number.isFinite(cursorModelsPct)
         || cursorModelsPct < 0 || cursorModelsPct > 100
         || typeof otherModelsPct != "number" || !Number.isFinite(otherModelsPct)
         || otherModelsPct < 0 || otherModelsPct > 100
+        || (typeof billingCycleStart != "number" && typeof billingCycleStart != "string")
         || (typeof billingCycleEnd != "number" && typeof billingCycleEnd != "string")) {
         throw new Error("Invalid Cursor monthly usage response");
     }
+    const billingCycleStartMs = Number(billingCycleStart);
     const billingCycleEndMs = Number(billingCycleEnd);
-    if (!Number.isSafeInteger(billingCycleEndMs) || billingCycleEndMs <= 0) {
+    if (!Number.isSafeInteger(billingCycleStartMs) || billingCycleStartMs <= 0
+        || !Number.isSafeInteger(billingCycleEndMs) || billingCycleEndMs <= billingCycleStartMs) {
         throw new Error("Invalid Cursor monthly usage response");
     }
     return {
         cursorModelsPct: Math.ceil(cursorModelsPct),
         otherModelsPct: Math.ceil(otherModelsPct),
+        monthlyStartAt: Math.round(billingCycleStartMs / 1000),
         monthlyResetAt: Math.round(billingCycleEndMs / 1000),
     };
 }
-
 
 export function grokUsageToPayload(
     usage: GrokUsageSnapshot,
@@ -1222,26 +1246,36 @@ export function grokUsageToPayload(
     const usageRows: UsageRow[] = [];
     if (monthlyUsage != null) {
         const monthlyResetText = formatCountdown(monthlyUsage.monthlyResetAt);
+        const monthlyWindowMs = (monthlyUsage.monthlyResetAt - monthlyUsage.monthlyStartAt) * 1000;
+        const monthlyPacing = calcPacing(
+            monthlyUsage.cursorModelsPct,
+            monthlyUsage.monthlyResetAt,
+            monthlyWindowMs,
+        );
+        const monthlyExpectedPercentage = monthlyPacing.timeElapsedPct;
         usageRows.push(
             {
-                label: "Cursor Models",
+                label: "Cursor Models (Monthly)",
                 percentage: monthlyUsage.cursorModelsPct,
                 resetText: monthlyResetText,
-                severity: "normal",
+                severity: deriveCssClass(monthlyUsage.cursorModelsPct, monthlyPacing) || "normal",
+                pacing: { expectedPercentage: monthlyExpectedPercentage },
             },
             {
-                label: "Other Models",
+                label: "Other Models (Monthly)",
                 percentage: monthlyUsage.otherModelsPct,
                 resetText: monthlyResetText,
-                severity: "normal",
+                severity: deriveCssClass(monthlyUsage.otherModelsPct, monthlyPacing) || "normal",
+                pacing: { expectedPercentage: monthlyExpectedPercentage },
             },
         );
     }
     usageRows.push({
-        label: "Weekly",
+        label: "GrokBot (Weekly)",
         percentage: usage.weeklyPct,
         resetText: formatCountdown(usage.weeklyResetAt),
         severity: weeklySeverity,
+        pacing: { expectedPercentage: pacing.timeElapsedPct },
     });
     return stampPayload({
         text: addProviderBadge(
@@ -1556,6 +1590,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
     const weeklyPacing = calcPacing(weeklyPct, weeklyResetAt, CLAUDE_WEEKLY_WINDOW_MS);
 
     const cssClass = deriveCssClass(weeklyPct, weeklyPacing);
+    const sessionSeverity = deriveCssClass(sessionPct, sessionPacing);
     const sessionCountdown = formatCountdown(sessionResetAt);
     const weeklyCountdown = formatCountdown(weeklyResetAt);
 
@@ -1564,7 +1599,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
             `${weeklyPacing.icon} ◉${weeklyPct}% ⧖${weeklyPacing.timeElapsedPct}%`,
             "A"),
         tooltip: [
-            formatQuotaRow("Session", sessionPct, sessionCountdown),
+            formatQuotaRow("Session", sessionPct, sessionCountdown, sessionSeverity),
             formatQuotaRow("Week", weeklyPct, weeklyCountdown, cssClass),
         ].join("\n"),
         class: mergeClasses(cssClass, "provider-claude"),
@@ -1575,13 +1610,15 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
                 label: "Session",
                 percentage: sessionPct,
                 resetText: sessionCountdown,
-                severity: "normal",
+                severity: sessionSeverity == "warning" || sessionSeverity == "critical" ? sessionSeverity : "normal",
+                pacing: { expectedPercentage: sessionPacing.timeElapsedPct },
             },
             {
                 label: "Weekly",
                 percentage: weeklyPct,
                 resetText: weeklyCountdown,
                 severity: cssClass == "warning" || cssClass == "critical" ? cssClass : "normal",
+                pacing: { expectedPercentage: weeklyPacing.timeElapsedPct },
             },
         ],
     });

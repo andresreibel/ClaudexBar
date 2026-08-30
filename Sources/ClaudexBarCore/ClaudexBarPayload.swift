@@ -38,11 +38,16 @@ public enum ClaudexBarSeverity: String, Codable, Sendable {
     }
 }
 
+public struct ClaudexBarUsagePacing: Decodable, Equatable, Sendable {
+    public let expectedPercentage: Double
+}
+
 public struct ClaudexBarUsageRow: Decodable, Equatable, Sendable {
     public let label: String
     public let percentage: Double
     public let resetText: String
     public let severity: ClaudexBarSeverity
+    public let pacing: ClaudexBarUsagePacing?
 }
 
 public struct ClaudexBarPayload: Decodable, Equatable, Sendable {

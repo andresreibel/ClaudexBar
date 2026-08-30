@@ -4,11 +4,13 @@
 
 ### Added
 
-- SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, Cursor Models and Other Models monthly usage/reset rows, bounded Cursor-backed weekly Grok usage/reset requests, and redacted reconnect guidance.
+- SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly) usage/reset rows, bounded Cursor-backed requests, and redacted reconnect guidance.
 - Structured progress and reset rows in the macOS dropdown for every available OpenAI, Anthropic, and SpaceXAI quota window, with compact menu-bar summaries unchanged.
+- Paired actual and expected progress bars across OpenAI, Anthropic, Cursor monthly, and GrokBot weekly quota windows.
 
 ### Fixed
 
+- Changed per-row pace coloring to cosmic orange for usage above expected but under 10% over pace, and red at 10% or more over pace.
 - Show the SpaceXAI sign-in action only when Grok credentials are missing or rejected; authenticated accounts no longer display a redundant reconnect button.
 - Use `X` as the SpaceXAI provider badge in the menu bar and detail view instead of the internal Grok initial `G`.
 - Removed reset countdowns from the compact bar summary. Session and weekly reset times remain in the detail view, including cached Claude usage.

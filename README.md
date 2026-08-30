@@ -19,8 +19,8 @@ The native macOS dropdown shows structured OpenAI (Codex), Anthropic (Claude), a
 ## Features
 
 - Stable OpenAI, Anthropic, and SpaceXAI switching: selection updates immediately while the dropdown and menu-bar anchor remain stationary during loading.
-- Structured session and weekly progress rows with reset countdowns; SpaceXAI also shows Cursor Models and Other Models monthly usage.
-- Warning or critical labels only on the quota window that triggered them.
+- Paired actual and expected progress bars with reset countdowns for session and weekly windows; SpaceXAI shows Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly).
+- Actual bars turn cosmic orange whenever usage is over expected and existing red at 10% or more over expected.
 - OpenAI free reset-credit count in the menu bar and macOS dropdown.
 - Five-minute refresh, manual refresh, caching, and rate-limit backoff.
 - Subtle last-updated time in the macOS dropdown and Linux tooltip.
@@ -43,15 +43,15 @@ O(1) → ◉1% ⧖1%
 | `↑ ↗ → ↘ ↓` | Rounded pace delta: vertical at 10% or more, diagonal from 1% to 9%, horizontal at 0%; up is ahead and down is under |
 | `◉1%` | Weekly budget used |
 | `⧖1%` | Weekly window time elapsed |
-| Detail view | Progress bars and reset countdowns for each available quota window, with warning or critical color on the affected row |
+| Detail view | Actual and expected progress bars plus reset countdowns for each quota window |
 
-The menu bar summarizes the weekly window. The macOS dropdown shows each available provider window separately: OpenAI and Anthropic session/weekly usage, and SpaceXAI Cursor Models monthly, Other Models monthly, and Grok weekly usage.
-Normal quota rows omit pacing prose such as `on track`, `under`, or `ahead`.
-On macOS, the dropdown remains 390 × 440 points while provider usage loads.
+The menu bar summarizes the weekly window. The macOS dropdown shows each available provider window separately: OpenAI and Anthropic session/weekly usage, and SpaceXAI Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly).
+The expected bar represents the percentage of the quota that would be used at a linear pace given how much of the window has elapsed.
+On macOS, the dropdown remains 390 × 500 points while provider usage loads.
 
 Read `◉` and `⧖` as a pair. `◉` is how much budget you have spent, `⧖` is how much of the window has passed, and the arrow compares them. `◉0% ⧖5%` means the window is 5% gone and you have spent nothing, so you are well under pace. When `◉` runs ahead of `⧖`, you are on track to exhaust the budget before the window resets.
 
-The macOS menu-bar summary uses the standard adaptive system label color. Linux Waybar keeps its status colors: orange means more than 5% ahead of pace or at least 75% of the weekly budget used; red means more than 10% ahead of pace or at least 90% used.
+The macOS and Linux adapters use the same pace colors: cosmic orange (`#ff9e64`) when actual usage is above expected but less than 10% over pace, and red when it is at least 10% over pace. Usage at or below expected retains the normal provider color.
 
 Window lengths differ by provider. Codex reports its own window length. Claude's weekly window is seven days and resets on the account's assigned weekly schedule. SpaceXAI combines Cursor's monthly model buckets with Grok's weekly percentage and next reset time. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how each provider supplies this.
 

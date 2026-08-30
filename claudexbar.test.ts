@@ -99,8 +99,8 @@ describe("codexUsageToPayload", () => {
         expect(payload.updatedAt).toBeDefined();
         expect(payload.tooltip).toContain("\nUpdated:");
         expect(payload.tooltip).not.toContain("Provider:");
-        expect(payload.usageRows).toEqual([
-            { label: "Session", percentage: 3, resetText: "n/a", severity: "normal" },
+        expect(payload.usageRows).toMatchObject([
+            { label: "Session", percentage: 3, resetText: "n/a", severity: "critical" },
             { label: "Weekly", percentage: 4, resetText: "n/a", severity: "critical" },
         ]);
     });
@@ -183,6 +183,29 @@ describe("codexUsageToPayload", () => {
         expect(warning.tooltip).not.toContain("Session 12% · warning");
     });
 
+    test("colors each row orange below ten percent over pace and red at ten percent", () => {
+        const now = Date.now();
+        const payload = (sessionPct: number | null, weeklyPct: number) => codexUsageToPayload({
+            sessionPct,
+            weeklyPct,
+            sessionResetAt: sessionPct == null ? null : (now + 50 * 60 * 1000) / 1000,
+            weeklyResetAt: (now + 50 * 60 * 1000) / 1000,
+            sessionWindowMinutes: sessionPct == null ? null : 100,
+            weeklyWindowMinutes: 100,
+            credits: null,
+            resetCredits: null,
+            source: "oauth",
+            planType: "plus",
+        });
+
+        expect(payload(null, 50).class).toEqual(["provider-codex"]);
+        expect(payload(null, 54).class).toEqual(["warning", "provider-codex"]);
+        expect(payload(null, 55).class).toEqual(["critical", "provider-codex"]);
+
+        const independentRows = payload(54, 50);
+        expect(independentRows.usageRows.map((row) => row.severity)).toEqual(["warning", "normal"]);
+    });
+
     test("recognizes a lone seven-day primary window as weekly usage", () => {
         const usage = parseCodexOAuthUsage({
             rate_limit: {
@@ -222,7 +245,7 @@ describe("codexUsageToPayload", () => {
         expect(payload.tooltip).toContain("Week 29% · critical · reset ");
     });
 
-    test("keeps near-exhausted weekly usage critical", () => {
+    test("keeps near-exhausted usage orange when it is under ten percent over pace", () => {
         const payload = codexUsageToPayload({
             sessionPct: null,
             weeklyPct: 90,
@@ -236,7 +259,7 @@ describe("codexUsageToPayload", () => {
             planType: "plus",
         });
 
-        expect(payload.class).toEqual(["critical", "provider-codex"]);
+        expect(payload.class).toEqual(["warning", "provider-codex"]);
     });
 
     test("rejects OAuth usage when every window is unavailable", () => {
@@ -254,8 +277,10 @@ describe("Grok provider", () => {
             autoPercentUsed: 0.10333333333333333,
             apiPercentUsed: 0.172,
         },
+        billingCycleStart: "1785456000000",
         billingCycleEnd: "1788134400000",
     };
+
 
 
     test("maps strict Cursor usage into the shared weekly payload and cycle", () => {
@@ -281,9 +306,9 @@ describe("Grok provider", () => {
             percentage: row.percentage,
             severity: row.severity,
         }))).toEqual([
-            { label: "Cursor Models", percentage: 1, severity: "normal" },
-            { label: "Other Models", percentage: 1, severity: "normal" },
-            { label: "Weekly", percentage: 42, severity: "normal" },
+            { label: "Cursor Models (Monthly)", percentage: 1, severity: "normal" },
+            { label: "Other Models (Monthly)", percentage: 1, severity: "normal" },
+            { label: "GrokBot (Weekly)", percentage: 42, severity: "normal" },
         ]);
         expect(enrichedPayload.text).toBe(payload.text);
         expect(enrichedPayload.percentageLabel).toBe("Weekly");
@@ -396,7 +421,7 @@ describe("Grok provider", () => {
             expect(payload.text).toContain("◉42%");
             expect(payload.percentageLabel).toBe("Weekly");
             expect(payload.authenticationRequired).toBe(false);
-            expect(payload.usageRows.map((row) => row.label)).toEqual(["Weekly"]);
+            expect(payload.usageRows.map((row) => row.label)).toEqual(["GrokBot (Weekly)"]);
         } finally {
             await rm(directory, { recursive: true, force: true });
         }

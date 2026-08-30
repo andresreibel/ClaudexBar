@@ -24,13 +24,13 @@ It emits a JSON payload consumed by the Quattro command widget and the optional 
   "percentageLabel": "Session",
   "resetCredits": 1,
   "usageRows": [
-    {"label": "Session", "percentage": 2, "resetText": "4h55m", "severity": "normal"},
-    {"label": "Weekly", "percentage": 78, "resetText": "2d9h", "severity": "warning"}
+    {"label": "Session", "percentage": 2, "resetText": "4h55m", "severity": "normal", "pacing": {"expectedPercentage": 1}},
+    {"label": "Weekly", "percentage": 78, "resetText": "2d9h", "severity": "warning", "pacing": {"expectedPercentage": 60}}
   ]
 }
 ```
 
-`percentage` and `percentageLabel` retain the compact cross-platform compatibility field. `usageRows` is the ordered native detail contract: the shared engine owns labels, percentages, reset countdowns, and per-row severity, while Swift only renders them. The shared tooltip omits normal pacing prose and appends `warning` or `critical` only to the quota window that triggered that severity. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
+`percentage` and `percentageLabel` retain the compact cross-platform compatibility field. `usageRows` is the ordered native detail contract: the shared engine owns labels, actual percentages, expected percentages, reset countdowns, and per-row severity, while Swift renders paired progress bars. Expected usage is the rounded share of the real quota window that has elapsed; monthly Cursor rows use the returned billing-cycle start and end rather than a calendar approximation. The shared tooltip omits normal pacing prose and appends `warning` or `critical` only to the quota window that triggered that severity. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
 
 ## Quota windows
 
@@ -38,13 +38,13 @@ Pacing needs a window length, because `⧖` reports how much of the window has e
 
 - Codex returns `limit_window_seconds` per window, so the engine uses the reported length.
 - Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (7 days).
-- SpaceXAI's Cursor-backed `GetCurrentPeriodUsage` Connect endpoint supplies the Cursor Models and Other Models monthly percentages and billing-cycle reset. `GetSandUsageStatus` supplies Grok's weekly percentage and next reset; the engine uses a seven-day pacing window for that weekly row.
+- SpaceXAI's Cursor-backed `GetCurrentPeriodUsage` Connect endpoint supplies the Cursor Models (Monthly) and Other Models (Monthly) percentages and billing-cycle reset. `GetSandUsageStatus` supplies GrokBot (Weekly) usage and its next reset; the engine uses a seven-day pacing window for that row.
 
 Claude's weekly field is named `seven_day` and resets on a fixed account schedule. The reset day and time do not change when a subscription begins, so pacing must use the full seven-day cycle even when the implied start predates a recent signup or upgrade.
 
 ## Severity policy
 
-The shared engine evaluates critical state before warning state. A weekly window is critical when it is more than 10% ahead of pace or at least 90% used. It is warning when it is more than 5% ahead of pace or at least 75% used. The platform adapters map warning to orange and critical to red.
+The shared engine derives severity independently for every quota row. Actual usage at or below expected is normal; usage above expected but less than 10% over pace is warning; usage at least 10% over pace is critical. The platform adapters map warning to cosmic orange (`#ff9e64`) and critical to red.
 
 ## Linux adapter
 

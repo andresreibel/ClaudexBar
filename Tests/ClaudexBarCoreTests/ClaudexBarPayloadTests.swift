@@ -25,7 +25,7 @@ import Testing
 }
 
 @Test func decodesStructuredUsageRows() throws {
-    let data = Data(#"{"text":"X → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly","authenticationRequired":false,"usageRows":[{"label":"Cursor Models","percentage":12,"resetText":"14d6h","severity":"normal"},{"label":"Other Models","percentage":8,"resetText":"14d6h","severity":"normal"},{"label":"Weekly","percentage":42,"resetText":"3d","severity":"critical"}]}"#.utf8)
+    let data = Data(#"{"text":"X → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly","authenticationRequired":false,"usageRows":[{"label":"Cursor Models (Monthly)","percentage":12,"resetText":"14d6h","severity":"normal","pacing":{"expectedPercentage":10}},{"label":"Other Models (Monthly)","percentage":8,"resetText":"14d6h","severity":"normal","pacing":{"expectedPercentage":10}},{"label":"GrokBot (Weekly)","percentage":42,"resetText":"3d","severity":"critical","pacing":{"expectedPercentage":42}}]}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
     #expect(payload.classes == ["provider-grok"])
@@ -33,9 +33,10 @@ import Testing
     #expect(payload.percentageLabel == "Weekly")
     #expect(payload.severity == .normal)
     #expect(payload.authenticationRequired == false)
-    #expect(payload.usageRows.map(\.label) == ["Cursor Models", "Other Models", "Weekly"])
+    #expect(payload.usageRows.map(\.label) == ["Cursor Models (Monthly)", "Other Models (Monthly)", "GrokBot (Weekly)"])
     #expect(payload.usageRows.map(\.percentage) == [12, 8, 42])
     #expect(payload.usageRows.last?.severity == .critical)
+    #expect(payload.usageRows[0].pacing?.expectedPercentage == 10)
     #expect(payload.macOSDetail.isEmpty)
 }
 
