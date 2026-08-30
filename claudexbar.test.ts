@@ -16,6 +16,7 @@ import {
     loginGrok,
     nextProvider,
     parseGrokUsage,
+    renderGrokPayload,
     stripLegacyBarCountdown,
 } from "./claudexbar";
 
@@ -248,6 +249,7 @@ describe("Grok provider", () => {
         expect(payload.text).toContain("◉42%");
         expect(payload.class).toContain("provider-grok");
         expect(payload.percentageLabel).toBe("Weekly");
+        expect(payload.authenticationRequired).toBe(false);
         expect(payload.tooltip).toContain("Week 42%");
         expect(nextProvider("codex")).toBe("claude");
         expect(nextProvider("claude")).toBe("grok");
@@ -331,6 +333,7 @@ describe("Grok provider", () => {
             expect(headers.get("content-type")).toBe("application/json");
             expect(headers.get("connect-protocol-version")).toBe("1");
             expect(JSON.stringify(payload)).not.toContain(sentinel);
+            expect(payload.authenticationRequired).toBe(false);
         } finally {
             await rm(directory, { recursive: true, force: true });
         }
@@ -357,6 +360,42 @@ describe("Grok provider", () => {
                     nextResetTimestampUtc: usageResponse.nextResetTimestampUtc,
                 }),
             })).rejects.toThrow("Invalid Grok usage response");
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
+
+    test("labels only missing or rejected Grok credentials as sign-in required", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "claudexbar-grok-auth-state-"));
+        const authPath = join(directory, "grok-auth.json");
+        try {
+            const missing = await renderGrokPayload({ authPath });
+            expect(missing.authenticationRequired).toBe(true);
+
+            await writeFile(authPath, JSON.stringify({
+                accessToken: "test-access-token",
+                refreshToken: "test-refresh-token",
+            }));
+            const unauthorized = await renderGrokPayload({
+                authPath,
+                fetchImpl: async () => new Response(null, { status: 401 }),
+            });
+            expect(unauthorized.authenticationRequired).toBe(true);
+
+            const unavailable = await renderGrokPayload({
+                authPath,
+                fetchImpl: async () => new Response(null, { status: 503 }),
+            });
+            expect(unavailable.authenticationRequired).toBeUndefined();
+
+            const malformed = await renderGrokPayload({
+                authPath,
+                fetchImpl: async () => Response.json({
+                    usagePercent: "42",
+                    nextResetTimestampUtc: usageResponse.nextResetTimestampUtc,
+                }),
+            });
+            expect(malformed.authenticationRequired).toBeUndefined();
         } finally {
             await rm(directory, { recursive: true, force: true });
         }

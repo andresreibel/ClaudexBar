@@ -25,13 +25,24 @@ import Testing
 }
 
 @Test func decodesGrokWeeklyPayload() throws {
-    let data = Data(#"{"text":"G → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly"}"#.utf8)
+    let data = Data(#"{"text":"G → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly","authenticationRequired":false}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
     #expect(payload.classes == ["provider-grok"])
     #expect(payload.percentage == 42)
     #expect(payload.percentageLabel == "Weekly")
     #expect(payload.severity == .normal)
+    #expect(payload.authenticationRequired == false)
+}
+
+@Test func decodesGrokAuthenticationRequirementAdditively() throws {
+    let requiredData = Data(#"{"text":"⚠ G","tooltip":"Grok sign-in required.","class":["error","provider-grok"],"authenticationRequired":true}"#.utf8)
+    let required = try JSONDecoder().decode(ClaudexBarPayload.self, from: requiredData)
+    #expect(required.authenticationRequired == true)
+
+    let legacyData = Data(#"{"text":"G","tooltip":"Week 1%","class":["provider-grok"]}"#.utf8)
+    let legacy = try JSONDecoder().decode(ClaudexBarPayload.self, from: legacyData)
+    #expect(legacy.authenticationRequired == nil)
 }
 
 @Test func providerMetadataMatchesSharedEngine() {

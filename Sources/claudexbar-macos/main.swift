@@ -199,11 +199,11 @@ private final class ClaudexBarModel: ObservableObject {
 
         do {
             let nextPayload = try await runner.payload()
+            payload = nextPayload
             guard nextPayload.severity != .error else {
                 errorMessage = "Unable to load \(nextProvider.displayName) usage."
                 return
             }
-            payload = nextPayload
             errorMessage = nil
         } catch {
             errorMessage = "Unable to load \(nextProvider.displayName) usage."
@@ -220,11 +220,11 @@ private final class ClaudexBarModel: ObservableObject {
             let runner = try EngineRunner.resolve()
             try await runner.signInGrok()
             let nextPayload = try await runner.payload()
+            payload = nextPayload
             guard nextPayload.severity != .error else {
                 errorMessage = "Unable to load SpaceXAI usage."
                 return
             }
-            payload = nextPayload
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -327,8 +327,8 @@ private struct ClaudexBarMenu: View {
                     .foregroundStyle(.red)
             }
 
-            if model.provider == .grok {
-                Button("Sign in / reconnect SpaceXAI") {
+            if model.provider == .grok, model.payload?.authenticationRequired == true {
+                Button("Sign in to SpaceXAI") {
                     Task { await model.signInGrok() }
                 }
                 .disabled(model.isRefreshing)

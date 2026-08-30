@@ -139,10 +139,10 @@ ClaudexBar keeps credentials outside the repository and application bundle. It r
 - Codex: `~/.codex/auth.json`.
 - Claude on Linux: `~/.claude/.credentials.json`.
 - Claude on macOS: the credentials file when present, otherwise the `Claude Code-credentials` Keychain item.
-- SpaceXAI: `~/.codex/claudexbar/grok-auth.json`, created with mode `0600` only after the explicit **Sign in / reconnect SpaceXAI** action.
+- SpaceXAI: `~/.codex/claudexbar/grok-auth.json`, created with mode `0600` only after the explicit **Sign in to SpaceXAI** action.
 - Provider selection and caches: `~/.codex/claudexbar/`.
 
-The shared engine may refresh existing Codex or Claude OAuth credentials when required. SpaceXAI uses its own explicit PKCE sign-in and never opens a browser during normal refresh or provider switching; expired Grok credentials require **Sign in / reconnect SpaceXAI**. Some Anthropic organizations reject the OAuth usage endpoint with `403`; see [troubleshooting](docs/TROUBLESHOOTING.md).
+The shared engine may refresh existing Codex or Claude OAuth credentials when required. SpaceXAI uses its own explicit PKCE sign-in and never opens a browser during normal refresh or provider switching. The macOS app shows **Sign in to SpaceXAI** only when credentials are missing or rejected; authenticated and unrelated error states show no authentication button. Some Anthropic organizations reject the OAuth usage endpoint with `403`; see [troubleshooting](docs/TROUBLESHOOTING.md).
 
 ## Development
 

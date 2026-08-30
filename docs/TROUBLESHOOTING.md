@@ -29,7 +29,7 @@ Sign in with Claude Code. Linux expects `~/.claude/.credentials.json`; macOS can
 
 ## Missing or expired SpaceXAI sign-in
 
-Select SpaceXAI and click **Sign in / reconnect SpaceXAI**. ClaudexBar opens the Cursor sign-in page only for that explicit action, stores the returned credentials at `~/.codex/claudexbar/grok-auth.json` with mode `0600`, then refreshes the Grok meter. If usage later reports that sign-in is required, reconnect; normal refreshes never open the browser automatically.
+Select SpaceXAI and click **Sign in to SpaceXAI**. ClaudexBar opens the Cursor sign-in page only for that explicit action, stores the returned credentials at `~/.codex/claudexbar/grok-auth.json` with mode `0600`, then refreshes the Grok meter. Once authenticated, the sign-in action disappears. Missing or rejected credentials show it again; network and response errors do not claim that you are logged out.
 
 ## Claude usage returns `403`
 

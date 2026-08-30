@@ -57,6 +57,8 @@ The packaged app bundles `claudexbar.ts` under `Contents/Resources`. The Swift a
 
 The macOS picker displays OpenAI, Anthropic, and SpaceXAI while preserving the engine's `codex`, `claude`, and `grok` identifiers. Selection updates immediately, clears the previous provider's usage, and shows a loading indicator until the new payload arrives.
 
+The shared payload optionally carries `authenticationRequired`. The engine sets it to `true` only when Grok credentials are missing or rejected with `401`, sets it to `false` after successful live usage, and omits it for unrelated failures. Swift shows the **Sign in** action only for explicit `true`; it never inspects credentials or parses error text.
+
 ## Credentials
 
 - Codex uses `~/.codex/auth.json`.

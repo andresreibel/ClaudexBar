@@ -46,6 +46,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let percentageLabel: String?
     public let resetCredits: Double?
     public let updatedAt: String?
+    public let authenticationRequired: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case text
@@ -55,9 +56,19 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         case percentageLabel
         case resetCredits
         case updatedAt
+        case authenticationRequired
     }
 
-    public init(text: String, tooltip: String, classes: [String] = [], percentage: Double? = nil, percentageLabel: String? = nil, resetCredits: Double? = nil, updatedAt: String? = nil) {
+    public init(
+        text: String,
+        tooltip: String,
+        classes: [String] = [],
+        percentage: Double? = nil,
+        percentageLabel: String? = nil,
+        resetCredits: Double? = nil,
+        updatedAt: String? = nil,
+        authenticationRequired: Bool? = nil
+    ) {
         self.text = text
         self.tooltip = tooltip
         self.classes = classes
@@ -65,6 +76,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         self.percentageLabel = percentageLabel
         self.resetCredits = resetCredits
         self.updatedAt = updatedAt
+        self.authenticationRequired = authenticationRequired
     }
 
     public init(from decoder: Decoder) throws {
@@ -75,6 +87,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         percentageLabel = try container.decodeIfPresent(String.self, forKey: .percentageLabel)
         resetCredits = try container.decodeIfPresent(Double.self, forKey: .resetCredits)
         updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+        authenticationRequired = try container.decodeIfPresent(Bool.self, forKey: .authenticationRequired)
 
         if let values = try? container.decode([String].self, forKey: .classes) {
             classes = values

@@ -65,6 +65,7 @@ type WaybarPayload = {
     percentageLabel?: string;
     resetCredits?: number;
     updatedAt?: string;
+    authenticationRequired?: boolean;
 };
 
 type SpawnResult = {
@@ -130,6 +131,8 @@ type GrokLoginDependencies = {
     uuid?: () => string;
     verifier?: () => string;
 };
+
+class GrokAuthenticationError extends Error {}
 
 type CodexAuth = {
     raw: Record<string, unknown>;
@@ -273,6 +276,9 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
     const percentageLabel = toStringValue(value.percentageLabel) ?? undefined;
     const resetCredits = toNumber(value.resetCredits) ?? undefined;
     const updatedAt = toStringValue(value.updatedAt) ?? undefined;
+    const authenticationRequired = typeof value.authenticationRequired == "boolean"
+        ? value.authenticationRequired
+        : undefined;
     return {
         text,
         tooltip,
@@ -281,6 +287,7 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
         percentageLabel,
         resetCredits,
         updatedAt,
+        authenticationRequired,
     };
 }
 
@@ -1030,15 +1037,15 @@ async function loadGrokCredentials(authPath: string): Promise<GrokCredentials> {
     try {
         parsed = JSON.parse(await readFile(authPath, "utf8"));
     } catch {
-        throw new Error(GROK_AUTH_ERROR);
+        throw new GrokAuthenticationError(GROK_AUTH_ERROR);
     }
     if (!isRecord(parsed)) {
-        throw new Error(GROK_AUTH_ERROR);
+        throw new GrokAuthenticationError(GROK_AUTH_ERROR);
     }
     const accessToken = toStringValue(parsed.accessToken);
     const refreshToken = toStringValue(parsed.refreshToken);
     if (!accessToken || !refreshToken) {
-        throw new Error(GROK_AUTH_ERROR);
+        throw new GrokAuthenticationError(GROK_AUTH_ERROR);
     }
     return { accessToken, refreshToken };
 }
@@ -1146,6 +1153,7 @@ export function grokUsageToPayload(usage: GrokUsageSnapshot): WaybarPayload {
         class: mergeClasses(cssClass, "provider-grok"),
         percentage: usage.weeklyPct,
         percentageLabel: "Weekly",
+        authenticationRequired: false,
     });
 }
 
@@ -1170,7 +1178,7 @@ export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {})
         throw new Error("Grok usage request failed");
     }
     if (response.status == 401) {
-        throw new Error(GROK_AUTH_ERROR);
+        throw new GrokAuthenticationError(GROK_AUTH_ERROR);
     }
     if (!response.ok) {
         throw new Error(`Grok usage request failed (HTTP ${response.status})`);
@@ -1183,6 +1191,22 @@ export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {})
         throw new Error("Invalid Grok usage response");
     }
     return grokUsageToPayload(parseGrokUsage(body));
+}
+
+export async function renderGrokPayload(
+    dependencies: GrokUsageDependencies = {},
+): Promise<WaybarPayload> {
+    try {
+        return await fetchGrokPayload(dependencies);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "Grok usage request failed";
+        return stampPayload({
+            text: "⚠ G",
+            tooltip: message,
+            class: ["error", "provider-grok"],
+            authenticationRequired: err instanceof GrokAuthenticationError ? true : undefined,
+        });
+    }
 }
 
 type ClaudeOAuth = {
@@ -1463,16 +1487,7 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
     }
 
     if (provider == GROK_PROVIDER) {
-        try {
-            return await fetchGrokPayload();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Grok usage request failed";
-            return stampPayload({
-                text: "⚠ G",
-                tooltip: message,
-                class: ["error", "provider-grok"],
-            });
-        }
+        return renderGrokPayload();
     }
 
     try {
