@@ -21,6 +21,7 @@ const GROK_AUTH_PATH = `${STATE_DIR}/grok-auth.json`;
 const GROK_LOGIN_URL = "https://cursor.com/loginDeepControl";
 const GROK_AUTH_POLL_URL = "https://api2.cursor.sh/auth/poll";
 const GROK_USAGE_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus";
+const CURSOR_MONTHLY_USAGE_URL = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
 const GROK_AUTH_ERROR = "Grok sign-in required. Sign in or reconnect Grok.";
 const GROK_WEEKLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const GROK_LOGIN_TIMEOUT_MS = 2 * 60 * 1000;
@@ -57,6 +58,13 @@ type Args = {
     loginGrok: boolean;
 };
 
+type UsageRow = {
+    label: string;
+    percentage: number;
+    resetText: string;
+    severity: "normal" | "warning" | "critical";
+};
+
 type WaybarPayload = {
     text: string;
     tooltip: string;
@@ -66,6 +74,7 @@ type WaybarPayload = {
     resetCredits?: number;
     updatedAt?: string;
     authenticationRequired?: boolean;
+    usageRows?: UsageRow[];
 };
 
 type SpawnResult = {
@@ -109,6 +118,12 @@ export type GrokUsageSnapshot = {
     weeklyResetAt: number;
     weeklyWindowMs: number;
 };
+export type CursorMonthlyUsageSnapshot = {
+    cursorModelsPct: number;
+    otherModelsPct: number;
+    monthlyResetAt: number;
+};
+
 
 type GrokCredentials = {
     accessToken: string;
@@ -118,6 +133,7 @@ type GrokCredentials = {
 type GrokUsageDependencies = {
     authPath?: string;
     usageUrl?: string;
+    monthlyUsageUrl?: string;
     fetchImpl?: typeof fetch;
 };
 
@@ -276,6 +292,15 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
     const percentageLabel = toStringValue(value.percentageLabel) ?? undefined;
     const resetCredits = toNumber(value.resetCredits) ?? undefined;
     const updatedAt = toStringValue(value.updatedAt) ?? undefined;
+    const usageRows = Array.isArray(value.usageRows)
+        && value.usageRows.every((row) => isRecord(row)
+            && typeof row.label == "string" && row.label.length > 0
+            && typeof row.percentage == "number" && Number.isFinite(row.percentage)
+            && row.percentage >= 0 && row.percentage <= 100
+            && typeof row.resetText == "string" && row.resetText.length > 0
+            && (row.severity == "normal" || row.severity == "warning" || row.severity == "critical"))
+        ? value.usageRows as UsageRow[]
+        : undefined;
     const authenticationRequired = typeof value.authenticationRequired == "boolean"
         ? value.authenticationRequired
         : undefined;
@@ -286,6 +311,7 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
         percentage,
         percentageLabel,
         resetCredits,
+        usageRows,
         updatedAt,
         authenticationRequired,
     };
@@ -1003,6 +1029,24 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
     const tooltipLines: string[] = [];
     const sessionSeverity = usage.weeklyPct == null ? cssClass : "";
     const weeklySeverity = usage.weeklyPct == null ? "" : cssClass;
+    const usageRows: UsageRow[] = [];
+    if (usage.sessionPct != null) {
+        usageRows.push({
+            label: "Session",
+            percentage: usage.sessionPct,
+            resetText: sessionCountdown,
+            severity: sessionSeverity == "warning" || sessionSeverity == "critical" ? sessionSeverity : "normal",
+        });
+    }
+    if (usage.weeklyPct != null) {
+        usageRows.push({
+            label: "Weekly",
+            percentage: usage.weeklyPct,
+            resetText: weeklyCountdown,
+            severity: weeklySeverity == "warning" || weeklySeverity == "critical" ? weeklySeverity : "normal",
+        });
+    }
+
 
     if (usage.sessionPct != null && sessionPacing != null) {
         tooltipLines.push(formatQuotaRow("Session", usage.sessionPct, sessionCountdown, sessionSeverity));
@@ -1029,6 +1073,7 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
         percentage: usage.sessionPct ?? usage.weeklyPct ?? undefined,
         percentageLabel: usage.sessionPct == null ? "Weekly" : "Session",
         resetCredits: usage.resetCredits ?? undefined,
+        usageRows,
     });
 }
 
@@ -1141,10 +1186,63 @@ export function parseGrokUsage(raw: unknown): GrokUsageSnapshot {
         weeklyWindowMs: GROK_WEEKLY_WINDOW_MS,
     };
 }
+export function parseCursorMonthlyUsage(raw: unknown): CursorMonthlyUsageSnapshot {
+    if (!isRecord(raw) || !isRecord(raw.planUsage)) {
+        throw new Error("Invalid Cursor monthly usage response");
+    }
+    const cursorModelsPct = raw.planUsage.autoPercentUsed;
+    const otherModelsPct = raw.planUsage.apiPercentUsed;
+    const billingCycleEnd = raw.billingCycleEnd;
+    if (typeof cursorModelsPct != "number" || !Number.isFinite(cursorModelsPct)
+        || cursorModelsPct < 0 || cursorModelsPct > 100
+        || typeof otherModelsPct != "number" || !Number.isFinite(otherModelsPct)
+        || otherModelsPct < 0 || otherModelsPct > 100
+        || (typeof billingCycleEnd != "number" && typeof billingCycleEnd != "string")) {
+        throw new Error("Invalid Cursor monthly usage response");
+    }
+    const billingCycleEndMs = Number(billingCycleEnd);
+    if (!Number.isSafeInteger(billingCycleEndMs) || billingCycleEndMs <= 0) {
+        throw new Error("Invalid Cursor monthly usage response");
+    }
+    return {
+        cursorModelsPct: Math.ceil(cursorModelsPct),
+        otherModelsPct: Math.ceil(otherModelsPct),
+        monthlyResetAt: Math.round(billingCycleEndMs / 1000),
+    };
+}
 
-export function grokUsageToPayload(usage: GrokUsageSnapshot): WaybarPayload {
+
+export function grokUsageToPayload(
+    usage: GrokUsageSnapshot,
+    monthlyUsage?: CursorMonthlyUsageSnapshot,
+): WaybarPayload {
     const pacing = calcPacing(usage.weeklyPct, usage.weeklyResetAt, usage.weeklyWindowMs);
     const cssClass = deriveCssClass(usage.weeklyPct, pacing);
+    const weeklySeverity = cssClass == "warning" || cssClass == "critical" ? cssClass : "normal";
+    const usageRows: UsageRow[] = [];
+    if (monthlyUsage != null) {
+        const monthlyResetText = formatCountdown(monthlyUsage.monthlyResetAt);
+        usageRows.push(
+            {
+                label: "Cursor Models",
+                percentage: monthlyUsage.cursorModelsPct,
+                resetText: monthlyResetText,
+                severity: "normal",
+            },
+            {
+                label: "Other Models",
+                percentage: monthlyUsage.otherModelsPct,
+                resetText: monthlyResetText,
+                severity: "normal",
+            },
+        );
+    }
+    usageRows.push({
+        label: "Weekly",
+        percentage: usage.weeklyPct,
+        resetText: formatCountdown(usage.weeklyResetAt),
+        severity: weeklySeverity,
+    });
     return stampPayload({
         text: addProviderBadge(
             `${pacing.icon} ◉${usage.weeklyPct}% ⧖${pacing.timeElapsedPct}%`,
@@ -1153,27 +1251,28 @@ export function grokUsageToPayload(usage: GrokUsageSnapshot): WaybarPayload {
         class: mergeClasses(cssClass, "provider-grok"),
         percentage: usage.weeklyPct,
         percentageLabel: "Weekly",
+        usageRows,
         authenticationRequired: false,
     });
 }
 
 export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {}): Promise<WaybarPayload> {
     const credentials = await loadGrokCredentials(dependencies.authPath ?? GROK_AUTH_PATH);
+    const fetchImpl = dependencies.fetchImpl ?? fetch;
+    const requestInit: RequestInit = {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${credentials.accessToken}`,
+            "Content-Type": "application/json",
+            "Connect-Protocol-Version": "1",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(10_000),
+    };
+
     let response: Response;
     try {
-        response = await (dependencies.fetchImpl ?? fetch)(
-            dependencies.usageUrl ?? GROK_USAGE_URL,
-            {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${credentials.accessToken}`,
-                    "Content-Type": "application/json",
-                    "Connect-Protocol-Version": "1",
-                },
-                body: "{}",
-                signal: AbortSignal.timeout(10_000),
-            },
-        );
+        response = await fetchImpl(dependencies.usageUrl ?? GROK_USAGE_URL, requestInit);
     } catch {
         throw new Error("Grok usage request failed");
     }
@@ -1190,7 +1289,21 @@ export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {})
     } catch {
         throw new Error("Invalid Grok usage response");
     }
-    return grokUsageToPayload(parseGrokUsage(body));
+    const weeklyUsage = parseGrokUsage(body);
+
+    let monthlyUsage: CursorMonthlyUsageSnapshot | undefined;
+    try {
+        const monthlyResponse = await fetchImpl(
+            dependencies.monthlyUsageUrl ?? CURSOR_MONTHLY_USAGE_URL,
+            requestInit,
+        );
+        if (monthlyResponse.ok) {
+            monthlyUsage = parseCursorMonthlyUsage(await monthlyResponse.json());
+        }
+    } catch {
+        // Monthly Cursor usage is optional enrichment; weekly Grok remains authoritative.
+    }
+    return grokUsageToPayload(weeklyUsage, monthlyUsage);
 }
 
 export async function renderGrokPayload(
@@ -1457,6 +1570,20 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
         class: mergeClasses(cssClass, "provider-claude"),
         percentage: sessionPct,
         percentageLabel: "Session",
+        usageRows: [
+            {
+                label: "Session",
+                percentage: sessionPct,
+                resetText: sessionCountdown,
+                severity: "normal",
+            },
+            {
+                label: "Weekly",
+                percentage: weeklyPct,
+                resetText: weeklyCountdown,
+                severity: cssClass == "warning" || cssClass == "critical" ? cssClass : "normal",
+            },
+        ],
     });
 
     await saveClaudeCachedPayload(payload);

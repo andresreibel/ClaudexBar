@@ -22,11 +22,15 @@ It emits a JSON payload consumed by the Quattro command widget and the optional 
   "class": ["warning", "provider-codex"],
   "percentage": 2,
   "percentageLabel": "Session",
-  "resetCredits": 1
+  "resetCredits": 1,
+  "usageRows": [
+    {"label": "Session", "percentage": 2, "resetText": "4h55m", "severity": "normal"},
+    {"label": "Weekly", "percentage": 78, "resetText": "2d9h", "severity": "warning"}
+  ]
 }
 ```
 
-`percentageLabel` identifies the quota window represented by the progress bar. The shared tooltip omits normal pacing prose and appends `warning` or `critical` only to the quota window that triggered that severity. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
+`percentage` and `percentageLabel` retain the compact cross-platform compatibility field. `usageRows` is the ordered native detail contract: the shared engine owns labels, percentages, reset countdowns, and per-row severity, while Swift only renders them. The shared tooltip omits normal pacing prose and appends `warning` or `critical` only to the quota window that triggered that severity. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
 
 ## Quota windows
 
@@ -34,7 +38,7 @@ Pacing needs a window length, because `⧖` reports how much of the window has e
 
 - Codex returns `limit_window_seconds` per window, so the engine uses the reported length.
 - Claude's `/api/oauth/usage` returns only `utilization` and `resets_at`, so the engine holds the lengths as constants: `CLAUDE_SESSION_WINDOW_MS` (5 hours) and `CLAUDE_WEEKLY_WINDOW_MS` (7 days).
-- SpaceXAI's Cursor-backed `GetSandUsageStatus` Connect endpoint returns `usagePercent` and `nextResetTimestampUtc`; the engine maps them into the shared weekly payload shape and uses a seven-day pacing window.
+- SpaceXAI's Cursor-backed `GetCurrentPeriodUsage` Connect endpoint supplies the Cursor Models and Other Models monthly percentages and billing-cycle reset. `GetSandUsageStatus` supplies Grok's weekly percentage and next reset; the engine uses a seven-day pacing window for that weekly row.
 
 Claude's weekly field is named `seven_day` and resets on a fixed account schedule. The reset day and time do not change when a subscription begins, so pacing must use the full seven-day cycle even when the implied start predates a recent signup or upgrade.
 

@@ -24,8 +24,8 @@ import Testing
     #expect(payload.severity == .critical)
 }
 
-@Test func decodesGrokWeeklyPayload() throws {
-    let data = Data(#"{"text":"X → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly","authenticationRequired":false}"#.utf8)
+@Test func decodesStructuredUsageRows() throws {
+    let data = Data(#"{"text":"X → ◉42% ⧖42%","tooltip":"Week 42% · reset 3d\nUpdated: 12:00 PM","class":["provider-grok"],"percentage":42,"percentageLabel":"Weekly","authenticationRequired":false,"usageRows":[{"label":"Cursor Models","percentage":12,"resetText":"14d6h","severity":"normal"},{"label":"Other Models","percentage":8,"resetText":"14d6h","severity":"normal"},{"label":"Weekly","percentage":42,"resetText":"3d","severity":"critical"}]}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
     #expect(payload.classes == ["provider-grok"])
@@ -33,6 +33,10 @@ import Testing
     #expect(payload.percentageLabel == "Weekly")
     #expect(payload.severity == .normal)
     #expect(payload.authenticationRequired == false)
+    #expect(payload.usageRows.map(\.label) == ["Cursor Models", "Other Models", "Weekly"])
+    #expect(payload.usageRows.map(\.percentage) == [12, 8, 42])
+    #expect(payload.usageRows.last?.severity == .critical)
+    #expect(payload.macOSDetail.isEmpty)
 }
 
 @Test func decodesGrokAuthenticationRequirementAdditively() throws {
@@ -43,6 +47,14 @@ import Testing
     let legacyData = Data(#"{"text":"X","tooltip":"Week 1%","class":["provider-grok"]}"#.utf8)
     let legacy = try JSONDecoder().decode(ClaudexBarPayload.self, from: legacyData)
     #expect(legacy.authenticationRequired == nil)
+    #expect(legacy.usageRows.isEmpty)
+}
+
+@Test func structuredRowsRemoveDuplicatedQuotaAndCreditDetail() throws {
+    let data = Data(#"{"text":"O(1) ↑ ◉21% ⧖13%","tooltip":"Session unavailable\nWeek 21% · critical · reset 6d1h\nCredits 1\nUpdated: 03:51 PM","class":["critical","provider-codex"],"resetCredits":1,"usageRows":[{"label":"Weekly","percentage":21,"resetText":"6d1h","severity":"critical"}]}"#.utf8)
+    let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
+
+    #expect(payload.macOSDetail == "Session unavailable")
 }
 
 @Test func providerMetadataMatchesSharedEngine() {

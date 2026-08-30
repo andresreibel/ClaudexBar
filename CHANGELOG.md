@@ -4,7 +4,8 @@
 
 ### Added
 
-- SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, bounded Cursor-backed weekly usage/reset requests, and redacted reconnect guidance.
+- SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, Cursor Models and Other Models monthly usage/reset rows, bounded Cursor-backed weekly Grok usage/reset requests, and redacted reconnect guidance.
+- Structured progress and reset rows in the macOS dropdown for every available OpenAI, Anthropic, and SpaceXAI quota window, with compact menu-bar summaries unchanged.
 
 ### Fixed
 

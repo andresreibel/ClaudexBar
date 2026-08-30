@@ -15,6 +15,7 @@ import {
     grokUsageToPayload,
     loginGrok,
     nextProvider,
+    parseCursorMonthlyUsage,
     parseGrokUsage,
     renderGrokPayload,
     stripLegacyBarCountdown,
@@ -98,6 +99,10 @@ describe("codexUsageToPayload", () => {
         expect(payload.updatedAt).toBeDefined();
         expect(payload.tooltip).toContain("\nUpdated:");
         expect(payload.tooltip).not.toContain("Provider:");
+        expect(payload.usageRows).toEqual([
+            { label: "Session", percentage: 3, resetText: "n/a", severity: "normal" },
+            { label: "Weekly", percentage: 4, resetText: "n/a", severity: "critical" },
+        ]);
     });
 
     test("renders the session window when weekly usage is unavailable", () => {
@@ -119,6 +124,12 @@ describe("codexUsageToPayload", () => {
         expect(payload.tooltip).toContain("Session 12%");
         expect(payload.tooltip).toContain("Week unavailable");
         expect(payload.tooltip).not.toContain("Week null%");
+        expect(payload.usageRows).toHaveLength(1);
+        expect(payload.usageRows[0]).toMatchObject({
+            label: "Session",
+            percentage: 12,
+            severity: "critical",
+        });
     });
 
     test("keeps reset countdowns in the detail tooltip, not the compact bar text", () => {
@@ -238,6 +249,14 @@ describe("Grok provider", () => {
         usagePercent: 42.4,
         nextResetTimestampUtc: "2026-08-31T00:00:00.000Z",
     };
+    const monthlyUsageResponse = {
+        planUsage: {
+            autoPercentUsed: 0.10333333333333333,
+            apiPercentUsed: 0.172,
+        },
+        billingCycleEnd: "1788134400000",
+    };
+
 
     test("maps strict Cursor usage into the shared weekly payload and cycle", () => {
         const usage = parseGrokUsage(usageResponse);
@@ -254,6 +273,20 @@ describe("Grok provider", () => {
         expect(nextProvider("codex")).toBe("claude");
         expect(nextProvider("claude")).toBe("grok");
         expect(nextProvider("grok")).toBe("codex");
+
+        const monthlyUsage = parseCursorMonthlyUsage(monthlyUsageResponse);
+        const enrichedPayload = grokUsageToPayload(usage, monthlyUsage);
+        expect(enrichedPayload.usageRows.map((row) => ({
+            label: row.label,
+            percentage: row.percentage,
+            severity: row.severity,
+        }))).toEqual([
+            { label: "Cursor Models", percentage: 1, severity: "normal" },
+            { label: "Other Models", percentage: 1, severity: "normal" },
+            { label: "Weekly", percentage: 42, severity: "normal" },
+        ]);
+        expect(enrichedPayload.text).toBe(payload.text);
+        expect(enrichedPayload.percentageLabel).toBe("Weekly");
     });
 
     test("opens the explicit PKCE login and stores returned credentials atomically", async () => {
@@ -314,18 +347,23 @@ describe("Grok provider", () => {
         }));
 
         try {
-            let requestUrl = "";
-            let requestInit: RequestInit | undefined;
+            const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
             const payload = await fetchGrokPayload({
                 authPath,
                 fetchImpl: async (input, init) => {
-                    requestUrl = String(input);
-                    requestInit = init;
-                    return Response.json(usageResponse);
+                    const url = String(input);
+                    requests.push({ url, init });
+                    return url.endsWith("/GetCurrentPeriodUsage")
+                        ? Response.json(monthlyUsageResponse)
+                        : Response.json(usageResponse);
                 },
             });
+            expect(requests.map((request) => request.url)).toEqual([
+                "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus",
+                "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+            ]);
+            const requestInit = requests[0]?.init;
             const headers = new Headers(requestInit?.headers);
-            expect(requestUrl).toBe("https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus");
             expect(requestInit?.method).toBe("POST");
             expect(requestInit?.body).toBe("{}");
             expect(requestInit?.signal).toBeInstanceOf(AbortSignal);
@@ -334,6 +372,31 @@ describe("Grok provider", () => {
             expect(headers.get("connect-protocol-version")).toBe("1");
             expect(JSON.stringify(payload)).not.toContain(sentinel);
             expect(payload.authenticationRequired).toBe(false);
+            expect(payload.usageRows.map((row) => row.percentage)).toEqual([1, 1, 42]);
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
+
+    test("keeps weekly Grok usage when optional monthly usage is unavailable", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "claudexbar-grok-monthly-"));
+        const authPath = join(directory, "grok-auth.json");
+        await writeFile(authPath, JSON.stringify({
+            accessToken: "test-access-token",
+            refreshToken: "test-refresh-token",
+        }));
+
+        try {
+            const payload = await fetchGrokPayload({
+                authPath,
+                fetchImpl: async (input) => String(input).endsWith("/GetCurrentPeriodUsage")
+                    ? new Response(null, { status: 401 })
+                    : Response.json(usageResponse),
+            });
+            expect(payload.text).toContain("◉42%");
+            expect(payload.percentageLabel).toBe("Weekly");
+            expect(payload.authenticationRequired).toBe(false);
+            expect(payload.usageRows.map((row) => row.label)).toEqual(["Weekly"]);
         } finally {
             await rm(directory, { recursive: true, force: true });
         }

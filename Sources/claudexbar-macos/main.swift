@@ -279,18 +279,23 @@ private struct ClaudexBarMenu: View {
                         .font(.system(.body, design: .monospaced, weight: .semibold))
                         .foregroundStyle(model.statusColor)
 
-                    if let percentage = payload.percentage {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(payload.percentageLabel ?? "Usage")
-                                Spacer()
-                                Text("\(percentage.formatted(.number.precision(.fractionLength(0...1))))%")
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                            ProgressView(value: min(max(percentage, 0), 100), total: 100)
-                                .tint(model.statusColor)
+                    if payload.usageRows.isEmpty {
+                        if let percentage = payload.percentage {
+                            usageRow(
+                                label: payload.percentageLabel ?? "Usage",
+                                percentage: percentage,
+                                resetText: nil,
+                                tint: model.statusColor
+                            )
+                        }
+                    } else {
+                        ForEach(Array(payload.usageRows.enumerated()), id: \.offset) { _, row in
+                            usageRow(
+                                label: row.label,
+                                percentage: row.percentage,
+                                resetText: row.resetText,
+                                tint: usageColor(for: row.severity)
+                            )
                         }
                     }
 
@@ -304,10 +309,13 @@ private struct ClaudexBarMenu: View {
                         }
                     }
 
-                    Text(payload.macOSDetail)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    let detail = payload.macOSDetail
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if let updatedTime = payload.updatedTimeText {
                         Text("Updated \(updatedTime)")
@@ -352,9 +360,43 @@ private struct ClaudexBarMenu: View {
             }
         }
         .padding(16)
-        .frame(width: 390, height: 350, alignment: .topLeading)
+        .frame(width: 390, height: 440, alignment: .topLeading)
         .task {
             await model.refresh()
+        }
+    }
+
+    private func usageColor(for severity: ClaudexBarSeverity) -> Color {
+        switch severity {
+        case .critical, .error: .red
+        case .warning: .orange
+        case .normal, .stale: .accentColor
+        }
+    }
+
+    private func usageRow(
+        label: String,
+        percentage: Double,
+        resetText: String?,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                Spacer()
+                Text("\(percentage.formatted(.number.precision(.fractionLength(0...1))))%")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            ProgressView(value: min(max(percentage, 0), 100), total: 100)
+                .tint(tint)
+
+            if let resetText {
+                Text("Resets in \(resetText)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }

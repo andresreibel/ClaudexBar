@@ -22,7 +22,7 @@ public enum ClaudexBarProvider: String, CaseIterable, Codable, Sendable {
     }
 }
 
-public enum ClaudexBarSeverity: String, Sendable {
+public enum ClaudexBarSeverity: String, Codable, Sendable {
     case normal
     case stale
     case warning
@@ -38,6 +38,13 @@ public enum ClaudexBarSeverity: String, Sendable {
     }
 }
 
+public struct ClaudexBarUsageRow: Decodable, Equatable, Sendable {
+    public let label: String
+    public let percentage: Double
+    public let resetText: String
+    public let severity: ClaudexBarSeverity
+}
+
 public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let text: String
     public let tooltip: String
@@ -47,6 +54,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let resetCredits: Double?
     public let updatedAt: String?
     public let authenticationRequired: Bool?
+    public let usageRows: [ClaudexBarUsageRow]
 
     private enum CodingKeys: String, CodingKey {
         case text
@@ -57,6 +65,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         case resetCredits
         case updatedAt
         case authenticationRequired
+        case usageRows
     }
 
     public init(
@@ -67,7 +76,8 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         percentageLabel: String? = nil,
         resetCredits: Double? = nil,
         updatedAt: String? = nil,
-        authenticationRequired: Bool? = nil
+        authenticationRequired: Bool? = nil,
+        usageRows: [ClaudexBarUsageRow] = []
     ) {
         self.text = text
         self.tooltip = tooltip
@@ -77,6 +87,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         self.resetCredits = resetCredits
         self.updatedAt = updatedAt
         self.authenticationRequired = authenticationRequired
+        self.usageRows = usageRows
     }
 
     public init(from decoder: Decoder) throws {
@@ -88,6 +99,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         resetCredits = try container.decodeIfPresent(Double.self, forKey: .resetCredits)
         updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
         authenticationRequired = try container.decodeIfPresent(Bool.self, forKey: .authenticationRequired)
+        usageRows = try container.decodeIfPresent([ClaudexBarUsageRow].self, forKey: .usageRows) ?? []
 
         if let values = try? container.decode([String].self, forKey: .classes) {
             classes = values
@@ -117,10 +129,17 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
                 lines.removeFirst()
             }
         }
-        if let creditsIndex = lines.firstIndex(where: { $0.hasPrefix("Free reset credits:") }) {
-            lines.remove(at: creditsIndex)
-            if creditsIndex > 0, lines[creditsIndex - 1].isEmpty {
-                lines.remove(at: creditsIndex - 1)
+        if !usageRows.isEmpty {
+            let labels = Set(usageRows.map(\.label))
+            lines.removeAll { line in
+                (labels.contains("Session") && line.hasPrefix("Session "))
+                    || (labels.contains("Weekly")
+                        && (line.hasPrefix("Week ") || line.hasPrefix("Weekly ")))
+            }
+        }
+        if resetCredits != nil {
+            lines.removeAll {
+                $0.hasPrefix("Credits ") || $0.hasPrefix("Free reset credits:")
             }
         }
         if let updatedIndex = lines.firstIndex(where: { $0.hasPrefix("Updated:") }) {
@@ -128,6 +147,12 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
             if updatedIndex > 0, lines[updatedIndex - 1].isEmpty {
                 lines.remove(at: updatedIndex - 1)
             }
+        }
+        while lines.first?.isEmpty == true {
+            lines.removeFirst()
+        }
+        while lines.last?.isEmpty == true {
+            lines.removeLast()
         }
         return lines.joined(separator: "\n")
     }
