@@ -245,7 +245,7 @@ describe("Grok provider", () => {
         expect(usage.weeklyResetAt).toBe(Date.parse(usageResponse.nextResetTimestampUtc) / 1000);
 
         const payload = grokUsageToPayload(usage);
-        expect(payload.text).toStartWith("G ");
+        expect(payload.text).toStartWith("X ");
         expect(payload.text).toContain("◉42%");
         expect(payload.class).toContain("provider-grok");
         expect(payload.percentageLabel).toBe("Weekly");

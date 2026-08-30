@@ -1148,7 +1148,7 @@ export function grokUsageToPayload(usage: GrokUsageSnapshot): WaybarPayload {
     return stampPayload({
         text: addProviderBadge(
             `${pacing.icon} ◉${usage.weeklyPct}% ⧖${pacing.timeElapsedPct}%`,
-            "G"),
+            "X"),
         tooltip: formatQuotaRow("Week", usage.weeklyPct, formatCountdown(usage.weeklyResetAt), cssClass),
         class: mergeClasses(cssClass, "provider-grok"),
         percentage: usage.weeklyPct,
@@ -1201,7 +1201,7 @@ export async function renderGrokPayload(
     } catch (err) {
         const message = err instanceof Error ? err.message : "Grok usage request failed";
         return stampPayload({
-            text: "⚠ G",
+            text: "⚠ X",
             tooltip: message,
             class: ["error", "provider-grok"],
             authenticationRequired: err instanceof GrokAuthenticationError ? true : undefined,

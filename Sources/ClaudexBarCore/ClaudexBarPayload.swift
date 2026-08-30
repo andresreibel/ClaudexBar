@@ -17,7 +17,7 @@ public enum ClaudexBarProvider: String, CaseIterable, Codable, Sendable {
         switch self {
         case .codex: "O"
         case .claude: "A"
-        case .grok: "G"
+        case .grok: "X"
         }
     }
 }

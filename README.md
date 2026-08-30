@@ -38,7 +38,7 @@ O(1) → ◉1% ⧖1%
 
 | Part | Meaning |
 | --- | --- |
-| `O` / `A` / `G` | OpenAI Codex / Anthropic Claude / SpaceXAI Grok |
+| `O` / `A` / `X` | OpenAI Codex / Anthropic Claude / SpaceXAI Grok |
 | `(1)` | Available Codex free reset credits |
 | `↑ ↗ → ↘ ↓` | Rounded pace delta: vertical at 10% or more, diagonal from 1% to 9%, horizontal at 0%; up is ahead and down is under |
 | `◉1%` | Weekly budget used |
