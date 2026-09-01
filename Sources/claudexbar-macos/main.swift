@@ -288,10 +288,10 @@ private struct ClaudexBarMenu: View {
                     .font(.system(size: 26, weight: .semibold, design: .monospaced))
                     .foregroundStyle(paceColor(entry?.weeklyPace))
                 Text("Weekly pace (expected − actual)")
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
             }
 
             if let payload {

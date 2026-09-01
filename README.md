@@ -12,7 +12,7 @@ Both versions show the same Codex, Claude, and SpaceXAI (Grok) subscription limi
 
 ### macOS menu-bar app
 
-![ClaudexBar running natively on macOS](assets/claudexbar-macos.png)
+![ClaudexBar macOS dashboard on a MacBook](assets/claudexbar-macos.png)
 
 The native macOS dropdown shows OpenAI (Codex), Anthropic (Claude), and SpaceXAI (Grok) simultaneously in three compact columns. Each column keeps its quota bars, reset countdowns, provider-specific details, and refresh time. The menu bar shows every provider's signed weekly pace at a glance.
 

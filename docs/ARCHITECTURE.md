@@ -54,6 +54,8 @@ Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Omarchy Quat
 
 ## macOS adapter
 
+![ClaudexBar macOS dashboard on a MacBook](../assets/claudexbar-macos.png)
+
 The Swift package contains:
 
 - `ClaudexBarCore`: single-provider and aggregate payload decoding, provider metadata, signed pace formatting, severity mapping, and macOS-only presentation cleanup.
