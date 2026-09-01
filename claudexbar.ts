@@ -56,6 +56,7 @@ type Args = {
     provider: Provider | null;
     toggleProvider: boolean;
     loginGrok: boolean;
+    allProviders: boolean;
 };
 
 type UsageRowPacing = {
@@ -80,6 +81,14 @@ type WaybarPayload = {
     updatedAt?: string;
     authenticationRequired?: boolean;
     usageRows?: UsageRow[];
+};
+
+export type AllProvidersPayload = {
+    providers: Array<{
+        provider: Provider;
+        weeklyPace: number | null;
+        payload: WaybarPayload;
+    }>;
 };
 
 type SpawnResult = {
@@ -214,9 +223,14 @@ function parseArgs(argv: string[]): Args {
     let provider: Provider | null = null;
     let toggleProvider = false;
     let loginGrok = false;
+    let allProviders = false;
 
     for (let idx = 0; idx < argv.length; idx += 1) {
         const arg = argv[idx];
+        if (arg == "--all") {
+            allProviders = true;
+            continue;
+        }
         if (arg == "--toggle") {
             toggleProvider = true;
             continue;
@@ -240,6 +254,7 @@ function parseArgs(argv: string[]): Args {
         provider,
         toggleProvider,
         loginGrok,
+        allProviders,
     };
 }
 
@@ -1628,12 +1643,43 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
     return payload;
 }
 
-function errorPayload(message: string): WaybarPayload {
+function errorPayload(message: string, authenticationRequired = false): WaybarPayload {
     return stampPayload({
         text: "⚠ cdx",
         tooltip: message,
         class: "error",
+        authenticationRequired: authenticationRequired || undefined,
     });
+}
+
+export function providerAuthenticationRequired(provider: Provider, message: string): boolean {
+    const lower = message.toLowerCase();
+    if (lower.includes("unauthorized") || lower.includes("api 401") || lower.includes("http 401")) {
+        return true;
+    }
+    if (provider == CLAUDE_PROVIDER) {
+        return lower.includes("credentials")
+            || lower.includes("claudeaioauth")
+            || lower.includes("claude access token")
+            || lower.includes("run: claude");
+    }
+    if (provider == CODEX_PROVIDER) {
+        return lower.includes("auth.json")
+            || lower.includes("no tokens")
+            || lower.includes("codex access token")
+            || lower.includes("run: codex login")
+            || lower.includes("not logged in");
+    }
+    return false;
+}
+
+export function weeklyPacePercentagePoints(provider: Provider, payload: WaybarPayload): number | null {
+    const weeklyLabel = provider == GROK_PROVIDER ? "GrokBot (Weekly)" : "Weekly";
+    const weekly = payload.usageRows?.find((row) => row.label == weeklyLabel);
+    if (!weekly?.pacing) {
+        return null;
+    }
+    return Math.round(weekly.pacing.expectedPercentage - weekly.percentage);
 }
 
 async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
@@ -1642,11 +1688,14 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
             return await fetchClaudePayload();
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            const cached = await fallbackToCachedClaudePayload(`Live fetch failed: ${message}`);
-            if (cached) {
-                return cached;
+            const authenticationRequired = providerAuthenticationRequired(CLAUDE_PROVIDER, message);
+            if (!authenticationRequired) {
+                const cached = await fallbackToCachedClaudePayload(`Live fetch failed: ${message}`);
+                if (cached) {
+                    return cached;
+                }
             }
-            return errorPayload(`Claude failed: ${message}`);
+            return errorPayload(`Claude failed: ${message}`, authenticationRequired);
         }
     }
 
@@ -1664,9 +1713,44 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
         } catch (rpcErr) {
             const oauthMessage = oauthErr instanceof Error ? oauthErr.message : String(oauthErr);
             const rpcMessage = rpcErr instanceof Error ? rpcErr.message : String(rpcErr);
-            return errorPayload(`Codex failed\nOAuth: ${oauthMessage}\nRPC: ${rpcMessage}`);
+            const message = `Codex failed\nOAuth: ${oauthMessage}\nRPC: ${rpcMessage}`;
+            return errorPayload(
+                message,
+                providerAuthenticationRequired(CODEX_PROVIDER, message),
+            );
         }
     }
+}
+
+async function renderProviderPayload(provider: Provider): Promise<WaybarPayload> {
+    const cached = await loadFreshRenderCache(provider);
+    if (cached) {
+        return cached;
+    }
+    const payload = await renderClaudex(provider);
+    await saveRenderCache(provider, payload);
+    return payload;
+}
+
+export async function renderAllProviders(
+    render: (provider: Provider) => Promise<WaybarPayload> = renderProviderPayload,
+): Promise<AllProvidersPayload> {
+    const order: Provider[] = [CLAUDE_PROVIDER, CODEX_PROVIDER, GROK_PROVIDER];
+    const providers = await Promise.all(order.map(async (provider) => {
+        let payload: WaybarPayload;
+        try {
+            payload = await render(provider);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            payload = errorPayload(`${provider} failed: ${message}`);
+        }
+        return {
+            provider,
+            weeklyPace: weeklyPacePercentagePoints(provider, payload),
+            payload,
+        };
+    }));
+    return { providers };
 }
 
 // Render the newly selected provider right away so the bar's next poll picks
@@ -1696,6 +1780,11 @@ async function main(): Promise<void> {
         return;
     }
 
+    if (args.allProviders) {
+        console.log(JSON.stringify(await renderAllProviders()));
+        return;
+    }
+
     if (args.toggleProvider) {
         const current = await readProvider();
         const next = nextProvider(current);
@@ -1719,14 +1808,7 @@ async function main(): Promise<void> {
     }
 
     const provider = await readProvider();
-    const cached = await loadFreshRenderCache(provider);
-    if (cached) {
-        console.log(JSON.stringify(cached));
-        return;
-    }
-    const payload = await renderClaudex(provider);
-    await saveRenderCache(provider, payload);
-    console.log(JSON.stringify(payload));
+    console.log(JSON.stringify(await renderProviderPayload(provider)));
 }
 
 if (import.meta.main) {

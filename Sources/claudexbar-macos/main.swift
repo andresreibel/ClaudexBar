@@ -64,30 +64,57 @@ private struct EngineRunner: Sendable {
         return EngineRunner(bunURL: bunURL, scriptURL: scriptURL)
     }
 
-    func payload() async throws -> ClaudexBarPayload {
-        let output = try await run(arguments: [])
+    func payloads() async throws -> ClaudexBarAggregatePayload {
+        let output = try await run(arguments: ["--all"])
         guard let data = output.data(using: .utf8) else {
             throw EngineError.invalidOutput(output)
         }
         do {
-            return try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
+            return try JSONDecoder().decode(ClaudexBarAggregatePayload.self, from: data)
         } catch {
             throw EngineError.invalidOutput(output)
         }
     }
 
-    func select(_ provider: ClaudexBarProvider) async throws {
-        let output = try await run(arguments: ["--provider", provider.rawValue])
-        guard output == provider.rawValue else {
-            throw EngineError.invalidOutput(output)
+    func reconnect(_ provider: ClaudexBarProvider) async throws {
+        if provider == .grok {
+            let output = try await run(arguments: ["--login", "grok"])
+            guard output == "grok" else {
+                throw EngineError.invalidOutput(output)
+            }
+            return
         }
+
+        let command = provider == .claude ? "claude auth login" : "codex login"
+        try await runLoginCommand(command)
     }
 
-    func signInGrok() async throws {
-        let output = try await run(arguments: ["--login", "grok"])
-        guard output == "grok" else {
-            throw EngineError.invalidOutput(output)
-        }
+    private func runLoginCommand(_ command: String) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            let stderr = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-lic", command]
+            process.standardOutput = Pipe()
+            process.standardError = stderr
+
+            do {
+                try process.run()
+            } catch {
+                throw EngineError.failed("Could not start provider sign-in: \(error.localizedDescription)")
+            }
+
+            process.waitUntilExit()
+            let errorOutput = String(
+                data: stderr.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard process.terminationStatus == 0 else {
+                throw EngineError.failed(
+                    errorOutput.isEmpty ? "Provider sign-in failed." : errorOutput
+                )
+            }
+        }.value
     }
 
     private func run(arguments: [String]) async throws -> String {
@@ -128,15 +155,13 @@ private struct EngineRunner: Sendable {
 
 @MainActor
 private final class ClaudexBarModel: ObservableObject {
-    @Published var provider: ClaudexBarProvider
-    @Published var payload: ClaudexBarPayload?
+    @Published var aggregate: ClaudexBarAggregatePayload?
     @Published var errorMessage: String?
     @Published var isRefreshing = false
 
     private var timer: Timer?
 
     init() {
-        provider = Self.readProvider()
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.refresh()
@@ -144,15 +169,22 @@ private final class ClaudexBarModel: ObservableObject {
         }
     }
 
+    var statusTitle: String {
+        aggregate?.menuBarText ?? "A --  O --  S --"
+    }
 
-    var statusColor: Color {
-        switch payload?.severity {
-        case .error: .red
-        case .critical: .red
-        case .warning: cosmicOrange
-        case .stale: .yellow
-        case .normal, nil: .primary
+    var statusTooltip: String {
+        guard let aggregate else {
+            return errorMessage ?? "ClaudexBar"
         }
+        return ClaudexBarProvider.dashboardOrder.map { provider in
+            let pace = aggregate.payload(for: provider)?.paceText ?? "--"
+            return "\(provider.displayName): \(pace) weekly pace"
+        }.joined(separator: "\n")
+    }
+
+    func payload(for provider: ClaudexBarProvider) -> ClaudexBarProviderPayload? {
+        aggregate?.payload(for: provider)
     }
 
     func refresh() async {
@@ -162,89 +194,26 @@ private final class ClaudexBarModel: ObservableObject {
 
         do {
             let runner = try EngineRunner.resolve()
-            payload = try await runner.payload()
-            provider = Self.readProvider()
+            aggregate = try await runner.payloads()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func select(_ nextProvider: ClaudexBarProvider) async {
-        guard !isRefreshing, nextProvider != provider else { return }
-
-        let previousProvider = provider
-        let previousPayload = payload
-        provider = nextProvider
-        payload = nil
-        errorMessage = nil
-        isRefreshing = true
-        defer { isRefreshing = false }
-
-        let runner: EngineRunner
-        do {
-            runner = try EngineRunner.resolve()
-        } catch {
-            provider = previousProvider
-            payload = previousPayload
-            errorMessage = "Couldn't switch to \(nextProvider.displayName)."
-            return
-        }
-
-        do {
-            try await runner.select(nextProvider)
-        } catch {
-            let persistedProvider = Self.readProvider()
-            guard persistedProvider == nextProvider else {
-                provider = persistedProvider
-                payload = persistedProvider == previousProvider ? previousPayload : nil
-                errorMessage = "Couldn't switch to \(nextProvider.displayName)."
-                return
-            }
-        }
-
-        do {
-            let nextPayload = try await runner.payload()
-            payload = nextPayload
-            guard nextPayload.severity != .error else {
-                errorMessage = "Unable to load \(nextProvider.displayName) usage."
-                return
-            }
-            errorMessage = nil
-        } catch {
-            errorMessage = "Unable to load \(nextProvider.displayName) usage."
-        }
-    }
-
-    func signInGrok() async {
-        guard provider == .grok, !isRefreshing else { return }
+    func reconnect(_ provider: ClaudexBarProvider) async {
+        guard !isRefreshing else { return }
         isRefreshing = true
         errorMessage = nil
         defer { isRefreshing = false }
 
         do {
             let runner = try EngineRunner.resolve()
-            try await runner.signInGrok()
-            let nextPayload = try await runner.payload()
-            payload = nextPayload
-            guard nextPayload.severity != .error else {
-                errorMessage = "Unable to load SpaceXAI usage."
-                return
-            }
+            try await runner.reconnect(provider)
+            aggregate = try await runner.payloads()
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private static func readProvider() -> ClaudexBarProvider {
-        let path = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/claudexbar/provider")
-        guard let value = try? String(contentsOf: path, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            let provider = ClaudexBarProvider(rawValue: value) else {
-            return .codex
-        }
-        return provider
     }
 }
 
@@ -252,126 +221,156 @@ private struct ClaudexBarMenu: View {
     @ObservedObject var model: ClaudexBarModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ClaudexBar")
-                        .font(.headline)
-                    Text(model.provider.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("ClaudexBar")
+                    .font(.headline)
                 Spacer()
-                if model.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-
-            Picker("Provider", selection: Binding(
-                get: { model.provider },
-                set: { provider in Task { await model.select(provider) } }
-            )) {
-                ForEach(ClaudexBarProvider.allCases, id: \.self) { provider in
-                    Text(provider.displayName).tag(provider)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(model.isRefreshing)
-
-            if let payload = model.payload {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(payload.text)
-                        .font(.system(.body, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(model.statusColor)
-
-                    if payload.usageRows.isEmpty {
-                        if let percentage = payload.percentage {
-                            usageRow(
-                                label: payload.percentageLabel ?? "Usage",
-                                percentage: percentage,
-                                resetText: nil,
-                                pacing: nil,
-                                tint: model.statusColor
-                            )
-                        }
+                Button {
+                    Task { await model.refresh() }
+                } label: {
+                    if model.isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
                     } else {
-                        ForEach(Array(payload.usageRows.enumerated()), id: \.offset) { _, row in
-                            usageRow(
-                                label: row.label,
-                                percentage: row.percentage,
-                                resetText: row.resetText,
-                                pacing: row.pacing,
-                                tint: usageColor(for: row.severity)
-                            )
-                        }
-                    }
-
-                    if let credits = payload.resetCredits {
-                        HStack {
-                            Text("Free reset credits")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(credits.formatted(.number.precision(.fractionLength(0...2))))
-                                .font(.system(.body, design: .monospaced, weight: .semibold))
-                        }
-                    }
-
-                    let detail = payload.macOSDetail
-                    if !detail.isEmpty {
-                        Text(detail)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if let updatedTime = payload.updatedTimeText {
-                        Text("Updated \(updatedTime)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        Image(systemName: "arrow.clockwise")
                     }
                 }
-            } else if model.errorMessage == nil {
-                Text("Loading usage…")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .disabled(model.isRefreshing)
+                .help("Refresh all providers")
             }
+
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(ClaudexBarProvider.dashboardOrder, id: \.rawValue) { provider in
+                    providerColumn(provider)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
 
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .lineLimit(2)
             }
 
-            if model.provider == .grok, model.payload?.authenticationRequired == true {
-                Button("Sign in to SpaceXAI") {
-                    Task { await model.signInGrok() }
-                }
-                .disabled(model.isRefreshing)
-            }
-
-            Spacer(minLength: 0)
-
-            Divider()
-
-            HStack {
-                Button("Refresh") {
-                    Task { await model.refresh() }
-                }
-                .disabled(model.isRefreshing)
-
-                Spacer()
-
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-            }
         }
-        .padding(16)
-        .frame(width: 390, height: 500, alignment: .topLeading)
+        .padding(.top, 16)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 24)
+        .frame(width: 620, height: 450, alignment: .topLeading)
         .task {
             await model.refresh()
         }
+    }
+
+    @ViewBuilder
+    private func providerColumn(_ provider: ClaudexBarProvider) -> some View {
+        let entry = model.payload(for: provider)
+        let payload = entry?.payload
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(provider.badge)
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.primary.opacity(0.09)))
+                Text(provider.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(entry?.paceText ?? "--")
+                    .font(.system(size: 26, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(paceColor(entry?.weeklyPace))
+                Text("Weekly pace (expected − actual)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            if let payload {
+                if payload.usageRows.isEmpty {
+                    if let percentage = payload.percentage {
+                        usageRow(
+                            label: payload.percentageLabel ?? "Usage",
+                            percentage: percentage,
+                            resetText: nil,
+                            pacing: nil,
+                            tint: usageColor(for: payload.severity)
+                        )
+                    }
+                } else {
+                    ForEach(Array(payload.usageRows.enumerated()), id: \.offset) { _, row in
+                        usageRow(
+                            label: row.label,
+                            percentage: row.percentage,
+                            resetText: row.resetText,
+                            pacing: row.pacing,
+                            tint: usageColor(for: row.severity)
+                        )
+                    }
+                }
+
+                if let credits = payload.resetCredits {
+                    HStack {
+                        Text("Reset credits")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(credits.formatted(.number.precision(.fractionLength(0...2))))
+                            .font(.system(.caption, design: .monospaced, weight: .semibold))
+                    }
+                    .font(.caption2)
+                }
+
+                let detail = payload.macOSDetail
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(payload.severity == .error ? Color.red : Color.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if payload.authenticationRequired == true {
+                    Button("Reconnect") {
+                        Task { await model.reconnect(provider) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isRefreshing)
+                }
+
+                Spacer(minLength: 0)
+
+                if let updatedTime = payload.updatedTimeText {
+                    Text("Updated \(updatedTime)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            } else {
+                Text("Loading usage…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(12)
+        .frame(width: 188, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.primary.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private func usageColor(for severity: ClaudexBarSeverity) -> Color {
@@ -382,6 +381,13 @@ private struct ClaudexBarMenu: View {
         }
     }
 
+    private func paceColor(_ pace: Double?) -> Color {
+        guard let pace else { return .secondary }
+        if pace < 0 { return cosmicOrange }
+        if pace > 0 { return .green }
+        return .secondary
+    }
+
     private func usageRow(
         label: String,
         percentage: Double,
@@ -389,43 +395,54 @@ private struct ClaudexBarMenu: View {
         pacing: ClaudexBarUsagePacing?,
         tint: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text("Actual")
-                Spacer()
+                Text(compactLabel(label))
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
                 Text("\(formatPercentage(percentage))%")
+                    .monospacedDigit()
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
 
             ProgressView(value: min(max(percentage, 0), 100), total: 100)
                 .tint(tint)
+                .controlSize(.small)
 
             if let pacing {
                 HStack {
                     Text("Expected")
-                    Spacer()
+                    Spacer(minLength: 4)
                     Text("\(formatPercentage(pacing.expectedPercentage))%")
+                        .monospacedDigit()
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
 
                 ProgressView(
                     value: min(max(pacing.expectedPercentage, 0), 100),
                     total: 100
                 )
                 .tint(Color.secondary)
+                .controlSize(.small)
             }
 
             if let resetText {
-                Text("Resets in \(resetText)")
+                Text("Resets \(resetText)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+        }
+    }
+
+    private func compactLabel(_ label: String) -> String {
+        switch label {
+        case "Cursor Models (Monthly)": "Cursor monthly"
+        case "Other Models (Monthly)": "Other monthly"
+        case "GrokBot (Weekly)": "GrokBot weekly"
+        default: label
         }
     }
 
@@ -437,9 +454,9 @@ private struct ClaudexBarMenu: View {
 @MainActor
 private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let model = ClaudexBarModel()
-    private let statusItem = NSStatusBar.system.statusItem(withLength: 150)
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
-    private var lastStatusTitle = "cdx"
+    private var lastStatusTitle = "A --  O --  S --"
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -456,10 +473,10 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
             button.sendAction(on: [.leftMouseUp])
         }
 
-        model.$payload
+        model.$aggregate
             .combineLatest(model.$errorMessage)
-            .sink { [weak self] payload, errorMessage in
-                self?.updateStatusItem(payload: payload, errorMessage: errorMessage)
+            .sink { [weak self] aggregate, errorMessage in
+                self?.updateStatusItem(aggregate: aggregate, errorMessage: errorMessage)
             }
             .store(in: &cancellables)
 
@@ -476,30 +493,29 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
     }
 
     func popoverDidClose(_ notification: Notification) {
-        updateStatusItem(payload: model.payload, errorMessage: model.errorMessage)
+        updateStatusItem(aggregate: model.aggregate, errorMessage: model.errorMessage)
     }
 
     private func updateStatusItem(
-        payload: ClaudexBarPayload?,
+        aggregate: ClaudexBarAggregatePayload?,
         errorMessage: String?
     ) {
         guard let button = statusItem.button else { return }
 
-        if let payload {
-            lastStatusTitle = payload.text
+        if let aggregate {
+            lastStatusTitle = aggregate.menuBarText
         }
         guard !popover.isShown else { return }
-        let title = payload?.text ?? lastStatusTitle
+        let title = aggregate?.menuBarText ?? lastStatusTitle
         let baseFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let attributedTitle = NSMutableAttributedString(
+        button.attributedTitle = NSAttributedString(
             string: title,
             attributes: [
                 .foregroundColor: NSColor.labelColor,
                 .font: baseFont,
             ]
         )
-        button.attributedTitle = attributedTitle
-        button.toolTip = payload?.tooltip ?? errorMessage ?? "ClaudexBar"
+        button.toolTip = model.statusTooltip
         button.setAccessibilityLabel("ClaudexBar, \(title)")
     }
 }

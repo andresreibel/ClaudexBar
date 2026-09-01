@@ -32,6 +32,8 @@ It emits a JSON payload consumed by the Quattro command widget and the optional 
 
 `percentage` and `percentageLabel` retain the compact cross-platform compatibility field. `usageRows` is the ordered native detail contract: the shared engine owns labels, actual percentages, expected percentages, reset countdowns, and per-row severity, while Swift renders paired progress bars. Expected usage is the rounded share of the real quota window that has elapsed; monthly Cursor rows use the returned billing-cycle start and end rather than a calendar approximation. The shared tooltip omits normal pacing prose and appends `warning` or `critical` only to the quota window that triggered that severity. `resetCredits` is optional because it is Codex-specific and is not available from every fallback source.
 
+The macOS app invokes `claudexbar.ts --all`. That additive response wraps one unchanged payload per provider in fixed Anthropic, OpenAI, SpaceXAI order and includes `weeklyPace`, calculated as expected weekly percentage minus actual weekly percentage. Each provider reads or refreshes its own existing cache independently. The normal no-argument engine output and persisted provider selection remain unchanged for Linux.
+
 ## Quota windows
 
 Pacing needs a window length, because `⧖` reports how much of the window has elapsed. The three providers supply it differently:
@@ -54,14 +56,14 @@ Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Omarchy Quat
 
 The Swift package contains:
 
-- `ClaudexBarCore`: payload decoding, provider metadata, severity mapping, and macOS-only presentation cleanup.
-- `claudexbar-macos`: native SwiftUI `MenuBarExtra`, refresh scheduling, provider switching, launch-at-login, and shared-engine process execution.
+- `ClaudexBarCore`: single-provider and aggregate payload decoding, provider metadata, signed pace formatting, severity mapping, and macOS-only presentation cleanup.
+- `claudexbar-macos`: native SwiftUI content hosted in an `NSPopover`, a variable-width `NSStatusItem`, refresh scheduling, SpaceXAI sign-in, and shared-engine process execution.
 
-The packaged app bundles `claudexbar.ts` under `Contents/Resources`. The Swift app locates Bun, invokes the bundled engine off the main actor, decodes the payload, and renders it. Provider logic is not duplicated in Swift.
+The packaged app bundles `claudexbar.ts` under `Contents/Resources`. The Swift app locates Bun, invokes `--all` off the main actor, decodes the aggregate payload, and renders all providers. Provider logic is not duplicated in Swift.
 
-The macOS picker displays OpenAI, Anthropic, and SpaceXAI while preserving the engine's `codex`, `claude`, and `grok` identifiers. Selection updates immediately, clears the previous provider's usage, and shows a loading indicator until the new payload arrives.
+The menu bar displays signed weekly pace for connected Anthropic, OpenAI, and SpaceXAI accounts. The popover renders all three fixed columns, including disconnected providers; provider selection remains a Linux-only interaction. Missing credentials or an unauthorized response set `authenticationRequired`, remove only that provider from the menu-bar title, and expose **Reconnect** in its column. Temporary network, rate-limit, and organization-policy errors remain visible without being mislabeled as disconnected.
 
-The shared payload optionally carries `authenticationRequired`. The engine sets it to `true` only when Grok credentials are missing or rejected with `401`, sets it to `false` after successful live usage, and omits it for unrelated failures. Swift shows the **Sign in** action only for explicit `true`; it never inspects credentials or parses error text.
+The shared payload optionally carries `authenticationRequired`. SpaceXAI reconnect uses its existing PKCE flow. Anthropic and OpenAI reconnect launch their installed CLI authentication commands, then refresh all provider payloads after successful completion. Swift never inspects credential files or parses error text.
 
 ## Credentials
 

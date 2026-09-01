@@ -17,9 +17,11 @@ public enum ClaudexBarProvider: String, CaseIterable, Codable, Sendable {
         switch self {
         case .codex: "O"
         case .claude: "A"
-        case .grok: "X"
+        case .grok: "S"
         }
     }
+
+    public static let dashboardOrder: [ClaudexBarProvider] = [.claude, .codex, .grok]
 }
 
 public enum ClaudexBarSeverity: String, Codable, Sendable {
@@ -136,10 +138,10 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         }
         if !usageRows.isEmpty {
             let labels = Set(usageRows.map(\.label))
+            let hasWeekly = labels.contains("Weekly") || labels.contains("GrokBot (Weekly)")
             lines.removeAll { line in
                 (labels.contains("Session") && line.hasPrefix("Session "))
-                    || (labels.contains("Weekly")
-                        && (line.hasPrefix("Week ") || line.hasPrefix("Weekly ")))
+                    || (hasWeekly && (line.hasPrefix("Week ") || line.hasPrefix("Weekly ")))
             }
         }
         if resetCredits != nil {
@@ -170,5 +172,41 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
             return nil
         }
         return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+public struct ClaudexBarProviderPayload: Decodable, Equatable, Sendable {
+    public let provider: ClaudexBarProvider
+    public let weeklyPace: Double?
+    public let payload: ClaudexBarPayload
+
+    public var isConnected: Bool {
+        payload.authenticationRequired != true
+    }
+
+    public var paceText: String {
+        guard let weeklyPace else { return "--" }
+        let rounded = Int(weeklyPace.rounded())
+        return rounded > 0 ? "+\(rounded)%" : "\(rounded)%"
+    }
+
+    public var menuBarText: String {
+        "\(provider.badge) \(paceText)"
+    }
+}
+
+public struct ClaudexBarAggregatePayload: Decodable, Equatable, Sendable {
+    public let providers: [ClaudexBarProviderPayload]
+
+    public func payload(for provider: ClaudexBarProvider) -> ClaudexBarProviderPayload? {
+        providers.first { $0.provider == provider }
+    }
+
+    public var menuBarText: String {
+        let connected = ClaudexBarProvider.dashboardOrder.compactMap { provider -> String? in
+            guard let entry = payload(for: provider), entry.isConnected else { return nil }
+            return entry.menuBarText
+        }
+        return connected.isEmpty ? "ClaudexBar" : connected.joined(separator: "  ")
     }
 }

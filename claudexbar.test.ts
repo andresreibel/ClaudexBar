@@ -17,8 +17,11 @@ import {
     nextProvider,
     parseCursorMonthlyUsage,
     parseGrokUsage,
+    providerAuthenticationRequired,
+    renderAllProviders,
     renderGrokPayload,
     stripLegacyBarCountdown,
+    weeklyPacePercentagePoints,
 } from "./claudexbar";
 
 describe("Claude weekly pacing", () => {
@@ -47,6 +50,51 @@ describe("Claude weekly pacing", () => {
             const pacing = calcPacing(50 * (1 + delta / 100), resetAt, windowMs);
             expect(pacing).toEqual({ icon, status, devPct: delta, timeElapsedPct: 50 });
         }
+    });
+});
+
+describe("combined provider pacing", () => {
+    const payload = (label: string, actual: number, expected: number) => ({
+        text: "",
+        tooltip: "",
+        usageRows: [{
+            label,
+            percentage: actual,
+            resetText: "1d",
+            severity: "normal" as const,
+            pacing: { expectedPercentage: expected },
+        }],
+    });
+
+    test("uses expected minus actual percentage points", () => {
+        expect(weeklyPacePercentagePoints("claude", payload("Weekly", 7, 6))).toBe(-1);
+        expect(weeklyPacePercentagePoints("codex", payload("Weekly", 21, 25))).toBe(4);
+        expect(weeklyPacePercentagePoints("grok", payload("GrokBot (Weekly)", 1, 40))).toBe(39);
+        expect(weeklyPacePercentagePoints("grok", payload("Weekly", 1, 40))).toBeNull();
+    });
+
+    test("returns all providers in display order and isolates failures", async () => {
+        const result = await renderAllProviders(async (provider) => {
+            if (provider == "codex") {
+                throw new Error("offline");
+            }
+            return provider == "grok"
+                ? payload("GrokBot (Weekly)", 1, 40)
+                : payload("Weekly", 7, 6);
+        });
+
+        expect(result.providers.map(({ provider }) => provider)).toEqual(["claude", "codex", "grok"]);
+        expect(result.providers.map(({ weeklyPace }) => weeklyPace)).toEqual([-1, null, 39]);
+        expect(result.providers[1]?.payload.class).toBe("error");
+    });
+});
+
+describe("provider authentication state", () => {
+    test("recognizes reconnectable Claude and Codex failures", () => {
+        expect(providerAuthenticationRequired("claude", "Missing Claude Code credentials in the macOS Keychain. Run: claude")).toBe(true);
+        expect(providerAuthenticationRequired("codex", "Missing ~/.codex/auth.json. Run: codex login")).toBe(true);
+        expect(providerAuthenticationRequired("claude", "Claude usage API 403: organization policy")).toBe(false);
+        expect(providerAuthenticationRequired("codex", "Codex RPC timed out")).toBe(false);
     });
 });
 

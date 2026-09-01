@@ -64,7 +64,26 @@ import Testing
     #expect(ClaudexBarProvider.grok.displayName == "SpaceXAI")
     #expect(ClaudexBarProvider.codex.badge == "O")
     #expect(ClaudexBarProvider.claude.badge == "A")
-    #expect(ClaudexBarProvider.grok.badge == "X")
+    #expect(ClaudexBarProvider.grok.badge == "S")
+    #expect(ClaudexBarProvider.dashboardOrder == [.claude, .codex, .grok])
+}
+
+@Test func decodesCombinedProviderPaceForMenuBar() throws {
+    let data = Data(#"{"providers":[{"provider":"grok","weeklyPace":39,"payload":{"text":"X","tooltip":"Grok"}},{"provider":"claude","weeklyPace":-1,"payload":{"text":"A","tooltip":"Claude"}},{"provider":"codex","weeklyPace":4,"payload":{"text":"O","tooltip":"Codex"}}]}"#.utf8)
+    let aggregate = try JSONDecoder().decode(ClaudexBarAggregatePayload.self, from: data)
+
+    #expect(aggregate.payload(for: .claude)?.paceText == "-1%")
+    #expect(aggregate.payload(for: .codex)?.paceText == "+4%")
+    #expect(aggregate.payload(for: .grok)?.paceText == "+39%")
+    #expect(aggregate.menuBarText == "A -1%  O +4%  S +39%")
+}
+
+@Test func combinedProviderPaceOmitsDisconnectedProviders() throws {
+    let data = Data(#"{"providers":[{"provider":"claude","weeklyPace":null,"payload":{"text":"A","tooltip":"Claude"}},{"provider":"codex","weeklyPace":4,"payload":{"text":"O","tooltip":"Reconnect","authenticationRequired":true}},{"provider":"grok","weeklyPace":39,"payload":{"text":"X","tooltip":"Grok"}}]}"#.utf8)
+    let aggregate = try JSONDecoder().decode(ClaudexBarAggregatePayload.self, from: data)
+
+    #expect(aggregate.payload(for: .codex)?.isConnected == false)
+    #expect(aggregate.menuBarText == "A --  S +39%")
 }
 
 @Test func linuxStatusColorsMatchWaybar() {
