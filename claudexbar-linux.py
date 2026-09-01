@@ -142,6 +142,10 @@ progressbar.expected > trough > progress { background: #8b8b94; }
   padding: 5px 10px;
   border-radius: 7px;
 }
+.loading-label {
+  color: #a1a1aa;
+  font-size: 12px;
+}
 .error-banner {
   color: #f7768e;
   font-size: 11px;
@@ -345,6 +349,7 @@ class DashboardWindow(Gtk.ApplicationWindow):
         self.app = app
         self.cards = {}
         self.refreshing = False
+        self.has_payload = False
         self.set_default_size(620, 450)
         self.set_resizable(False)
         self.add_css_class("claudexbar-window")
@@ -375,13 +380,28 @@ class DashboardWindow(Gtk.ApplicationWindow):
         header.append(self.refresh_button)
         root.append(header)
 
+        self.content_stack = Gtk.Stack()
+        self.content_stack.set_vexpand(True)
+
+        loading = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        loading.set_halign(Gtk.Align.CENTER)
+        loading.set_valign(Gtk.Align.CENTER)
+        self.loading_spinner = Gtk.Spinner(spinning=True)
+        loading.append(self.loading_spinner)
+        self.loading_label = Gtk.Label(label="Loading usage…")
+        self.loading_label.add_css_class("loading-label")
+        loading.append(self.loading_label)
+        self.content_stack.add_named(loading, "loading")
+
         cards = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, homogeneous=True)
         cards.set_vexpand(True)
         for provider in PROVIDERS:
             card = ProviderCard(provider, self.launch_reconnect)
             self.cards[provider] = card
             cards.append(card)
-        root.append(cards)
+        self.content_stack.add_named(cards, "cards")
+        self.content_stack.set_visible_child_name("loading")
+        root.append(self.content_stack)
 
         self.error_label = Gtk.Label(xalign=0, wrap=True)
         self.error_label.add_css_class("error-banner")
@@ -413,6 +433,10 @@ class DashboardWindow(Gtk.ApplicationWindow):
         self.refreshing = True
         self.refresh_button.set_sensitive(False)
         self.error_label.set_visible(False)
+        if not self.has_payload:
+            self.loading_label.set_label("Loading usage…")
+            self.loading_spinner.start()
+            self.content_stack.set_visible_child_name("loading")
         threading.Thread(target=self.load_payload, daemon=True).start()
 
     def load_payload(self):
@@ -444,6 +468,9 @@ class DashboardWindow(Gtk.ApplicationWindow):
         entries = {entry.get("provider"): entry for entry in providers if isinstance(entry, dict)}
         for provider, card in self.cards.items():
             card.render(entries.get(provider))
+        self.has_payload = True
+        self.loading_spinner.stop()
+        self.content_stack.set_visible_child_name("cards")
         self.refreshing = False
         self.refresh_button.set_sensitive(True)
         return GLib.SOURCE_REMOVE
@@ -451,6 +478,9 @@ class DashboardWindow(Gtk.ApplicationWindow):
     def finish_error(self, message):
         self.error_label.set_label(message)
         self.error_label.set_visible(True)
+        if not self.has_payload:
+            self.loading_spinner.stop()
+            self.loading_label.set_label("Usage unavailable")
         self.refreshing = False
         self.refresh_button.set_sensitive(True)
         return GLib.SOURCE_REMOVE

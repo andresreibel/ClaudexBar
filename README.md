@@ -111,7 +111,7 @@ Requirements:
 }
 ```
 
-The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Hover for compact details and click to open or close the three-card dashboard. The dashboard refresh button updates every provider together. This uses Quattro's built-in command widget—no custom QML or plugin is required.
+The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Hover for compact details and click to open or close the three-card dashboard. A loading spinner holds the cards back until the aggregate provider payload is ready; the refresh button then updates every provider together. This uses Quattro's built-in command widget—no custom QML or plugin is required.
 
 ### Optional Waybar integration
 
