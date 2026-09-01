@@ -92,6 +92,8 @@ The app is currently built from source and ad-hoc signed. There is no notarized 
 
 ### Linux
 
+![ClaudexBar command widget on an X1 running Omarchy Quattro](assets/claudexbar-linux-x1.png)
+
 `./install.sh` installs the shared engine. On Omarchy Quattro, add it as a command widget in `~/.config/omarchy/shell.json`:
 
 ```json
