@@ -7,6 +7,7 @@
 - SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly) usage/reset rows, bounded Cursor-backed requests, and redacted reconnect guidance.
 - Structured progress and reset rows in the macOS dropdown for every available OpenAI, Anthropic, and SpaceXAI quota window, with compact menu-bar summaries unchanged.
 - Paired actual and expected progress bars across OpenAI, Anthropic, Cursor monthly, and GrokBot weekly quota windows.
+- GTK 4 Linux dashboard matching the macOS three-card layout, with aggregate provider refresh, reconnect actions, Quattro/Waybar launch integration, and optional Wayland layer-shell placement.
 
 ### Fixed
 

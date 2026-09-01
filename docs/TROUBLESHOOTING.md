@@ -47,6 +47,16 @@ During temporary Claude failures or `429` backoff, ClaudexBar reuses the last va
 
 Ensure `~/.config/omarchy/shell.json` contains the documented `claudexbar` command widget with `"interval": 1`. The widget runs the installed engine every second, but the engine only fetches live usage about once per five minutes. Source updates take effect on the next run; restart the Omarchy shell only after changing the widget configuration.
 
+## Linux dashboard does not open
+
+Run the installed adapter from a terminal:
+
+```sh
+~/.local/bin/claudexbar-dashboard
+```
+
+Install Python 3, GTK 4, and PyGObject if it reports a missing GTK runtime. On Wayland, install `gtk4-layer-shell` for the anchored top-right popover; the dashboard still works as a normal GTK window without it. Confirm the Quattro or Waybar click command is `~/.local/bin/claudexbar-dashboard`, then rerun `./install.sh` after source updates.
+
 ## Rebuild the installed macOS app
 
 Do not test against a stale menu-bar process:

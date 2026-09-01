@@ -50,7 +50,9 @@ The shared engine derives severity independently for every quota row. Actual usa
 
 ## Linux adapter
 
-Linux installs the shared engine into `~/.local/bin/claudexbar.ts`. Omarchy Quattro runs it as its built-in command widget on a short interval and reads its five-minute render cache. Its compact plain-text tooltip holds the session, weekly, reset, and refresh details; it needs no custom QML or plugin. The optional Waybar adapter runs it every five minutes and receives refresh signals on provider changes.
+Linux installs the shared engine into `~/.local/bin/claudexbar.ts` and the thin GTK 4 adapter into `~/.local/bin/claudexbar-dashboard`. Omarchy Quattro runs the engine as its built-in command widget on a short interval and reads its five-minute render cache. Its compact plain-text tooltip holds the selected provider's session, weekly, reset, and refresh details; the optional Waybar adapter uses the same payload.
+
+Clicking the bar launches the GTK dashboard. It invokes `claudexbar.ts --all`, decodes the same fixed provider order and payload fields as macOS, and renders the matching three-card layout without duplicating authentication, quota, pacing, severity, or cache logic. On Wayland, optional `gtk4-layer-shell` anchors the dashboard as a top-right overlay; otherwise GTK presents a normal window. A second launch closes the existing dashboard instance.
 
 ## macOS adapter
 
@@ -65,7 +67,7 @@ The packaged app bundles `claudexbar.ts` under `Contents/Resources`. The Swift a
 
 The menu bar displays signed weekly pace for connected Anthropic, OpenAI, and SpaceXAI accounts. The popover renders all three fixed columns, including disconnected providers; provider selection remains a Linux-only interaction. Missing credentials or an unauthorized response set `authenticationRequired`, remove only that provider from the menu-bar title, and expose **Reconnect** in its column. Temporary network, rate-limit, and organization-policy errors remain visible without being mislabeled as disconnected.
 
-The shared payload optionally carries `authenticationRequired`. SpaceXAI reconnect uses its existing PKCE flow. Anthropic and OpenAI reconnect launch their installed CLI authentication commands, then refresh all provider payloads after successful completion. Swift never inspects credential files or parses error text.
+The shared payload optionally carries `authenticationRequired`. SpaceXAI reconnect uses its existing PKCE flow. Anthropic and OpenAI reconnect launch their installed CLI authentication commands. Swift runs those commands directly; Linux uses `xdg-terminal-exec` and refreshes after the terminal command exits. Neither adapter inspects credential files or parses error text.
 
 ## Credentials
 

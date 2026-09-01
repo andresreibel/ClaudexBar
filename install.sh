@@ -17,7 +17,7 @@ Usage:
 
 Options:
   macOS automatically builds and installs /Applications/ClaudexBar.app.
-  Linux always installs the shared CLI; these options add integrations:
+  Linux always installs the shared CLI and GTK dashboard; these options add integrations:
   --bashrc        Install ~/.bashrc.d/claudexbar helper functions
   --waybar        Install/patch Waybar module + style
   --all           Equivalent to: --bashrc --waybar
@@ -93,9 +93,11 @@ install_macos() {
 install_script() {
   mkdir -p "$HOME/.local/bin"
   cp "$REPO_DIR/claudexbar.ts" "$HOME/.local/bin/claudexbar.ts"
-  chmod +x "$HOME/.local/bin/claudexbar.ts"
+  cp "$REPO_DIR/claudexbar-linux.py" "$HOME/.local/bin/claudexbar-dashboard"
+  chmod +x "$HOME/.local/bin/claudexbar.ts" "$HOME/.local/bin/claudexbar-dashboard"
   echo "Installed: ~/.local/bin/claudexbar.ts"
-  echo "Source:    $REPO_DIR/claudexbar.ts"
+  echo "Installed: ~/.local/bin/claudexbar-dashboard"
+  echo "Source:    $REPO_DIR"
 }
 
 install_bashrc_integration() {
@@ -130,22 +132,24 @@ cdxmenu() {
     echo "Claudex Menu"
     echo "────────────"
     echo "provider: $provider"
-    echo "1) toggle provider"
-    echo "2) provider -> claude"
-    echo "3) provider -> codex"
-    echo "4) provider -> grok"
-    echo "5) sign in / reconnect grok"
-    echo "6) refresh -> waybar"
+    echo "1) open / close dashboard"
+    echo "2) toggle bar provider"
+    echo "3) provider -> claude"
+    echo "4) provider -> codex"
+    echo "5) provider -> grok"
+    echo "6) sign in / reconnect grok"
+    echo "7) refresh -> waybar"
     echo "q) quit"
     echo ""
     read -rp "Select: " choice
     case "$choice" in
-      1) claudex --toggle ;;
-      2) claudex --provider claude ;;
-      3) claudex --provider codex ;;
-      4) claudex --provider grok ;;
-      5) claudex --login grok ;;
-      6) pkill -RTMIN+11 waybar 2>/dev/null || true ;;
+      1) ~/.local/bin/claudexbar-dashboard ;;
+      2) claudex --toggle ;;
+      3) claudex --provider claude ;;
+      4) claudex --provider codex ;;
+      5) claudex --provider grok ;;
+      6) claudex --login grok ;;
+      7) pkill -RTMIN+11 waybar 2>/dev/null || true ;;
       q|Q) break ;;
       *) echo "Invalid choice" ;;
     esac
@@ -207,7 +211,7 @@ install_waybar_integration() {
         print "    \"return-type\": \"json\","
         print "    \"tooltip\": true,"
         print "    \"signal\": 11,"
-        print "    \"on-click\": \"~/.bun/bin/bun ~/.local/bin/claudexbar.ts --toggle && pkill -RTMIN+11 waybar\""
+        print "    \"on-click\": \"~/.local/bin/claudexbar-dashboard\""
         print "  }"
         inserted_block = 1
       }

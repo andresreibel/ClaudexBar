@@ -6,9 +6,9 @@
 | Platform | What gets installed |
 | --- | --- |
 | **macOS** | Native SwiftUI menu-bar app at `/Applications/ClaudexBar.app` |
-| **Linux** | Shared engine at `~/.local/bin/claudexbar.ts`, used by an Omarchy Quattro command widget or optional Waybar integration |
+| **Linux** | Shared engine and GTK dashboard under `~/.local/bin`, used by an Omarchy Quattro command widget or optional Waybar integration |
 
-Both versions show the same Codex, Claude, and SpaceXAI (Grok) subscription limits. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; only the desktop interface differs.
+Both versions show the same Codex, Claude, and SpaceXAI (Grok) subscription limits in matching three-card dashboards. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; each platform keeps a thin native desktop adapter.
 
 ### macOS menu-bar app
 
@@ -18,13 +18,13 @@ The native macOS dropdown shows OpenAI (Codex), Anthropic (Claude), and SpaceXAI
 
 ## Features
 
-- Simultaneous Anthropic, OpenAI, and SpaceXAI macOS dashboard with no provider switching.
+- Matching three-card Anthropic, OpenAI, and SpaceXAI dashboards on macOS and Linux.
 - Paired actual and expected progress bars with reset countdowns for session and weekly windows; SpaceXAI shows Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly).
 - Signed weekly pace is `expected − actual`: negative means quota consumption is ahead of its linear allowance.
-- Disconnected providers leave the menu-bar summary and show a **Reconnect** button in their dashboard column.
-- OpenAI free reset-credit count in its macOS column and Linux tooltip.
+- Disconnected providers show a **Reconnect** button in their dashboard column; the macOS menu-bar summary omits them until they reconnect.
+- OpenAI free reset-credit count in both dashboards and the Linux tooltip.
 - Five-minute refresh, manual refresh, caching, and rate-limit backoff.
-- Subtle last-updated time in the macOS dropdown and Linux tooltip.
+- Subtle per-provider last-updated time in both dashboards and the Linux tooltip.
 - Native macOS launch-at-login control.
 - Native monochrome macOS menu-bar summary.
 - Automatic macOS/Linux installer routing.
@@ -45,15 +45,15 @@ A -1%  O +4%  S +39%
 | Positive pace | Actual consumption is below the linear allowance |
 | `--` | Weekly pace is unavailable for that provider |
 
-The 620 × 450 point macOS popover shows all three providers in fixed Anthropic, OpenAI, SpaceXAI order. Each compact column retains the provider's available session, weekly, monthly, reset-credit, authentication, and refresh details. Actual and expected bars remain separate so the signed pace can be checked visually.
+The macOS popover and Linux dashboard both show all three providers in fixed Anthropic, OpenAI, SpaceXAI order. Each compact column retains the provider's available session, weekly, monthly, reset-credit, authentication, and refresh details. Actual and expected bars remain separate so the signed pace can be checked visually.
 
-Linux retains its selectable compact display:
+Linux retains its compact selectable bar display:
 
 ```text
 O(1) → ◉1% ⧖1%
 ```
 
-`◉` is quota consumed, `⧖` is elapsed window time, and the arrow expresses the existing relative pacing severity. The actual bar turns cosmic orange when usage is over expected and red when it is at least 10% over pace.
+`◉` is quota consumed, `⧖` is elapsed window time, and the arrow expresses the existing relative pacing severity. Hover shows the compact tooltip; click opens the matching three-card dashboard. The actual bar turns cosmic orange when usage is over expected and red when it is at least 10% over pace.
 
 Window lengths differ by provider. Codex reports its own window length. Claude's weekly window is seven days and resets on the account's assigned weekly schedule. SpaceXAI combines Cursor's monthly model buckets with Grok's weekly percentage and next reset time. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how each provider supplies this.
 
@@ -92,9 +92,14 @@ The app is currently built from source and ad-hoc signed. There is no notarized 
 
 ### Linux
 
-![ClaudexBar command widget on an X1 running Omarchy Quattro](assets/claudexbar-linux-x1.png)
+Requirements:
 
-`./install.sh` installs the shared engine. On Omarchy Quattro, add it as a command widget in `~/.config/omarchy/shell.json`:
+- Python 3, GTK 4, and PyGObject.
+- `gtk4-layer-shell` is recommended on Wayland so the dashboard opens as a top-right popover; without it, ClaudexBar uses a normal GTK window.
+
+![ClaudexBar Linux dashboard on an X1 running Omarchy Quattro](assets/claudexbar-linux-x1.png)
+
+`./install.sh` installs the shared engine and `~/.local/bin/claudexbar-dashboard`. On Omarchy Quattro, add them as a command widget in `~/.config/omarchy/shell.json`:
 
 ```json
 {
@@ -102,11 +107,11 @@ The app is currently built from source and ad-hoc signed. There is no notarized 
   "type": "command",
   "exec": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts",
   "interval": 1,
-  "onClick": "~/.bun/bin/bun ~/.local/bin/claudexbar.ts --toggle"
+  "onClick": "~/.local/bin/claudexbar-dashboard"
 }
 ```
 
-The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Click to switch providers and hover for compact session, weekly, reset, and refresh details. This uses Quattro's built-in command widget—no custom QML or plugin is required.
+The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Hover for compact details and click to open or close the three-card dashboard. The dashboard refresh button updates every provider together. This uses Quattro's built-in command widget—no custom QML or plugin is required.
 
 ### Optional Waybar integration
 
@@ -128,6 +133,7 @@ Or install integrations separately:
 Commands:
 
 ```sh
+claudexbar-dashboard
 claudex
 claudex --toggle
 claudex --provider claude
