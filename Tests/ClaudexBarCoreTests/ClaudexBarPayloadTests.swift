@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ClaudexBarCore
 
-@Test func decodesWaybarStringClass() throws {
+@Test func decodesBarPayloadStringClass() throws {
     let data = Data(#"{"text":"O(1) → 42%","tooltip":"Codex","class":"warning provider-codex","percentage":12,"percentageLabel":"Session","resetCredits":1,"updatedAt":"2026-07-11T08:10:00.000Z"}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
@@ -16,7 +16,7 @@ import Testing
     #expect(payload.severity == .warning)
 }
 
-@Test func decodesWaybarArrayClassAndSeverityPriority() throws {
+@Test func decodesBarPayloadArrayClassAndSeverityPriority() throws {
     let data = Data(#"{"text":"A ↑ 95%","tooltip":"Claude","class":["stale","critical","provider-claude"]}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
@@ -84,14 +84,6 @@ import Testing
 
     #expect(aggregate.payload(for: .codex)?.isConnected == false)
     #expect(aggregate.menuBarText == "A --  S +39%")
-}
-
-@Test func linuxStatusColorsMatchWaybar() {
-    #expect(ClaudexBarSeverity.warning.linuxStatusColorHex == "#ff9e64")
-    #expect(ClaudexBarSeverity.critical.linuxStatusColorHex == "#f7768e")
-    #expect(ClaudexBarSeverity.normal.linuxStatusColorHex == nil)
-    #expect(ClaudexBarSeverity.stale.linuxStatusColorHex == nil)
-    #expect(ClaudexBarSeverity.error.linuxStatusColorHex == nil)
 }
 
 @Test func removesDuplicatedHeaderFromMacOSDetailOnly() {

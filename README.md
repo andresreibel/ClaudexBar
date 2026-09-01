@@ -6,7 +6,7 @@
 | Platform | What gets installed |
 | --- | --- |
 | **macOS** | Native SwiftUI menu-bar app at `/Applications/ClaudexBar.app` |
-| **Linux** | Shared engine and GTK dashboard under `~/.local/bin`, used by an Omarchy Quattro command widget or optional Waybar integration |
+| **Linux** | Shared engine and GTK dashboard under `~/.local/bin`, used by an Omarchy Quattro command widget |
 
 Both versions show the same Codex, Claude, and SpaceXAI (Grok) subscription limits in matching three-card dashboards. One shared TypeScript engine owns authentication, quota fetching, pacing, reset countdowns, caching, and fallbacks; each platform keeps a thin native desktop adapter.
 
@@ -113,23 +113,6 @@ Requirements:
 
 The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Hover for compact details and click to open or close the three-card dashboard. Initial load and every manual refresh hide the cards behind a spinner for at least one second, then reveal all provider data together. This uses Quattro's built-in command widget—no custom QML or plugin is required.
 
-### Optional Waybar integration
-
-![ClaudexBar on Linux Waybar](screenshot-2026-02-17_00-41-59.png)
-
-For a non-Omarchy Waybar setup, add the shell and Waybar integrations:
-
-```sh
-./install.sh --all
-```
-
-Or install integrations separately:
-
-```sh
-./install.sh --bashrc
-./install.sh --waybar
-```
-
 Commands:
 
 ```sh
@@ -174,7 +157,7 @@ See [architecture](docs/ARCHITECTURE.md), [troubleshooting](docs/TROUBLESHOOTING
 - Claude macOS Keychain discovery: verified.
 - SpaceXAI login and live Cursor-backed Grok weekly usage: verified in the installed macOS app.
 - Claude live usage: account-dependent; the current OAuth endpoint can reject organization-managed accounts.
-- Linux: Quattro command-widget and optional Waybar paths use the same shared engine; CI validates the engine and installer syntax.
+- Linux: the Quattro command widget and GTK dashboard use the shared engine; CI validates the engine and installer syntax.
 
 ## License
 

@@ -13,7 +13,7 @@ ClaudexBar is one product with a shared provider engine and thin platform adapte
 - Claude caching and rate-limit backoff.
 - Provider selection under `~/.codex/claudexbar/`.
 
-It emits a JSON payload consumed by the Quattro command widget and the optional Waybar adapter:
+It emits a JSON payload consumed by the Quattro command widget:
 
 ```json
 {
@@ -50,7 +50,7 @@ The shared engine derives severity independently for every quota row. Actual usa
 
 ## Linux adapter
 
-Linux installs the shared engine into `~/.local/bin/claudexbar.ts` and the thin GTK 4 adapter into `~/.local/bin/claudexbar-dashboard`. Omarchy Quattro runs the engine as its built-in command widget on a short interval and reads its five-minute render cache. Its compact plain-text tooltip holds the selected provider's session, weekly, reset, and refresh details; the optional Waybar adapter uses the same payload.
+Linux installs the shared engine into `~/.local/bin/claudexbar.ts` and the thin GTK 4 adapter into `~/.local/bin/claudexbar-dashboard`. Omarchy Quattro runs the engine as its built-in command widget on a short interval and reads its five-minute render cache. Its compact plain-text tooltip holds the selected provider's session, weekly, reset, and refresh details.
 
 Clicking the bar launches the GTK dashboard. It invokes `claudexbar.ts --all`, decodes the same fixed provider order and payload fields as macOS, and renders the matching three-card layout without duplicating authentication, quota, pacing, severity, or cache logic. On Wayland, optional `gtk4-layer-shell` anchors the dashboard as a top-right overlay; otherwise GTK presents a normal window. A second launch closes the existing dashboard instance.
 
@@ -80,4 +80,4 @@ Credential values must never appear in tests, logs, screenshots, documentation, 
 
 ## Build and install
 
-`Makefile` builds the Swift release executable, generates the icon, creates the `.app` bundle, embeds the shared engine, and ad-hoc signs the bundle. `install.sh` selects this path on Darwin and installs the shared Linux engine; Quattro and optional Waybar supply the bar adapter.
+`Makefile` builds the Swift release executable, generates the icon, creates the `.app` bundle, embeds the shared engine, and ad-hoc signs the bundle. `install.sh` selects this path on Darwin and installs the shared Linux engine and GTK dashboard for Quattro.

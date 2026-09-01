@@ -7,7 +7,7 @@
 - SpaceXAI (Grok) as a third provider on macOS and Linux, with explicit PKCE sign-in, atomically stored private credentials, Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly) usage/reset rows, bounded Cursor-backed requests, and redacted reconnect guidance.
 - Structured progress and reset rows in the macOS dropdown for every available OpenAI, Anthropic, and SpaceXAI quota window, with compact menu-bar summaries unchanged.
 - Paired actual and expected progress bars across OpenAI, Anthropic, Cursor monthly, and GrokBot weekly quota windows.
-- GTK 4 Linux dashboard matching the macOS three-card layout, with aggregate provider refresh, reconnect actions, Quattro/Waybar launch integration, and optional Wayland layer-shell placement.
+- GTK 4 Linux dashboard matching the macOS three-card layout, with aggregate provider refresh, reconnect actions, Quattro command-widget integration, and optional Wayland layer-shell placement.
 
 ### Fixed
 
@@ -17,6 +17,10 @@
 - Removed reset countdowns from the compact bar summary. Session and weekly reset times remain in the detail view, including cached Claude usage.
 - Compacted the Linux Quattro detail tooltip while retaining session, weekly, reset, and refresh information.
 - Claude weekly elapsed-window percentage and pace arrow. The `seven_day` usage field is a 72-hour window, not seven days, so the previous 7-day assumption reported a window that began days before the account existed and overstated elapsed time by roughly 13x.
+
+### Removed
+
+- Removed the unused Waybar installer, runtime signaling, documentation, and legacy screenshots. Linux now supports the Omarchy Quattro command widget and GTK dashboard path only.
 
 ## 0.3.0 - 2026-07-11
 

@@ -55,7 +55,7 @@ Run the installed adapter from a terminal:
 ~/.local/bin/claudexbar-dashboard
 ```
 
-Install Python 3, GTK 4, and PyGObject if it reports a missing GTK runtime. On Wayland, install `gtk4-layer-shell` for the anchored top-right popover; the dashboard still works as a normal GTK window without it. Confirm the Quattro or Waybar click command is `~/.local/bin/claudexbar-dashboard`, then rerun `./install.sh` after source updates.
+Install Python 3, GTK 4, and PyGObject if it reports a missing GTK runtime. On Wayland, install `gtk4-layer-shell` for the anchored top-right popover; the dashboard still works as a normal GTK window without it. Confirm the Quattro click command is `~/.local/bin/claudexbar-dashboard`, then rerun `./install.sh` after source updates.
 
 ## Rebuild the installed macOS app
 

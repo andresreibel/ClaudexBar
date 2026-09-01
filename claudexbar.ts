@@ -71,7 +71,7 @@ type UsageRow = {
     pacing?: UsageRowPacing;
 };
 
-type WaybarPayload = {
+type BarPayload = {
     text: string;
     tooltip: string;
     class?: string | string[];
@@ -87,7 +87,7 @@ export type AllProvidersPayload = {
     providers: Array<{
         provider: Provider;
         weeklyPace: number | null;
-        payload: WaybarPayload;
+        payload: BarPayload;
     }>;
 };
 
@@ -99,7 +99,7 @@ type SpawnResult = {
 
 type ClaudeCachedPayload = {
     savedAtMs: number;
-    payload: WaybarPayload;
+    payload: BarPayload;
 };
 
 type ClaudeBackoffState = {
@@ -292,7 +292,7 @@ async function writeJsonFile(path: string, value: unknown): Promise<void> {
     await writeFile(path, JSON.stringify(value, null, 2), "utf8");
 }
 
-function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
+function normalizeBarPayload(value: unknown): BarPayload | null {
     if (!isRecord(value)) {
         return null;
     }
@@ -343,7 +343,7 @@ function normalizeWaybarPayload(value: unknown): WaybarPayload | null {
     };
 }
 
-function isErrorPayload(payload: WaybarPayload): boolean {
+function isErrorPayload(payload: BarPayload): boolean {
     const klass = payload.class;
     return klass == "error" || (Array.isArray(klass) && klass.includes("error"));
 }
@@ -365,13 +365,13 @@ export function compactLegacyTooltip(tooltip: string): string {
         .replace(/\n{2,}/g, "\n");
 }
 
-async function loadFreshRenderCache(provider: Provider): Promise<WaybarPayload | null> {
+async function loadFreshRenderCache(provider: Provider): Promise<BarPayload | null> {
     const parsed = await readJsonFile(renderCachePath(provider));
     if (!isRecord(parsed)) {
         return null;
     }
     const savedAtMs = toNumber(parsed.savedAtMs);
-    const payload = normalizeWaybarPayload(parsed.payload);
+    const payload = normalizeBarPayload(parsed.payload);
     if (savedAtMs == null || !payload) {
         return null;
     }
@@ -386,7 +386,7 @@ async function loadFreshRenderCache(provider: Provider): Promise<WaybarPayload |
     };
 }
 
-async function saveRenderCache(provider: Provider, payload: WaybarPayload): Promise<void> {
+async function saveRenderCache(provider: Provider, payload: BarPayload): Promise<void> {
     await writeJsonFile(renderCachePath(provider), {
         savedAtMs: Date.now(),
         payload,
@@ -400,7 +400,7 @@ async function loadClaudeCachedPayload(): Promise<ClaudeCachedPayload | null> {
     }
 
     const savedAtMs = toNumber(parsed.savedAtMs);
-    const payload = normalizeWaybarPayload(parsed.payload);
+    const payload = normalizeBarPayload(parsed.payload);
     if (savedAtMs == null || !payload) {
         return null;
     }
@@ -408,7 +408,7 @@ async function loadClaudeCachedPayload(): Promise<ClaudeCachedPayload | null> {
     return { savedAtMs, payload };
 }
 
-async function saveClaudeCachedPayload(payload: WaybarPayload): Promise<void> {
+async function saveClaudeCachedPayload(payload: BarPayload): Promise<void> {
     await writeJsonFile(CLAUDE_CACHE_PATH, {
         savedAtMs: Date.now(),
         payload,
@@ -481,19 +481,6 @@ async function runCommand(command: string, args: string[], timeoutMs: number): P
     });
 }
 
-async function refreshWaybar(): Promise<void> {
-    // Waybar re-runs the module on this signal. The omarchy-shell bar has no
-    // equivalent; there the widget's short interval plus the primed render
-    // cache handle display refresh instead, and this pkill matches nothing.
-    if (process.platform != "linux") {
-        return;
-    }
-    try {
-        await runCommand("pkill", ["-RTMIN+11", "waybar"], 2_000);
-    } catch {
-        // No-op when waybar is not running.
-    }
-}
 
 function mergeClasses(...values: Array<string | string[] | undefined>): string[] | undefined {
     const merged: string[] = [];
@@ -537,7 +524,7 @@ function formatLocalDateTime(ms: number): string {
     return new Date(ms).toLocaleString();
 }
 
-export function stampPayload(payload: WaybarPayload, updatedAtMs: number = Date.now()): WaybarPayload {
+export function stampPayload(payload: BarPayload, updatedAtMs: number = Date.now()): BarPayload {
     const updatedAt = new Date(updatedAtMs);
     const updatedTime = updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return {
@@ -547,7 +534,7 @@ export function stampPayload(payload: WaybarPayload, updatedAtMs: number = Date.
     };
 }
 
-function annotateCachedClaudePayload(payload: WaybarPayload, detail: string): WaybarPayload {
+function annotateCachedClaudePayload(payload: BarPayload, detail: string): BarPayload {
     return {
         ...payload,
         text: stripLegacyBarCountdown(payload.text),
@@ -556,7 +543,7 @@ function annotateCachedClaudePayload(payload: WaybarPayload, detail: string): Wa
     };
 }
 
-async function fallbackToCachedClaudePayload(detail: string): Promise<WaybarPayload | null> {
+async function fallbackToCachedClaudePayload(detail: string): Promise<BarPayload | null> {
     const cached = await loadClaudeCachedPayload();
     if (!cached) {
         return null;
@@ -1029,7 +1016,7 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
     };
 }
 
-export function codexUsageToPayload(usage: CodexUsageSnapshot): WaybarPayload {
+export function codexUsageToPayload(usage: CodexUsageSnapshot): BarPayload {
     const sessionCountdown = formatCountdown(usage.sessionResetAt);
     const weeklyCountdown = formatCountdown(usage.weeklyResetAt);
     const sessionWindowMs = usage.sessionWindowMinutes != null ? usage.sessionWindowMinutes * 60_000 : null;
@@ -1254,7 +1241,7 @@ export function parseCursorMonthlyUsage(raw: unknown): CursorMonthlyUsageSnapsho
 export function grokUsageToPayload(
     usage: GrokUsageSnapshot,
     monthlyUsage?: CursorMonthlyUsageSnapshot,
-): WaybarPayload {
+): BarPayload {
     const pacing = calcPacing(usage.weeklyPct, usage.weeklyResetAt, usage.weeklyWindowMs);
     const cssClass = deriveCssClass(usage.weeklyPct, pacing);
     const weeklySeverity = cssClass == "warning" || cssClass == "critical" ? cssClass : "normal";
@@ -1305,7 +1292,7 @@ export function grokUsageToPayload(
     });
 }
 
-export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {}): Promise<WaybarPayload> {
+export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {}): Promise<BarPayload> {
     const credentials = await loadGrokCredentials(dependencies.authPath ?? GROK_AUTH_PATH);
     const fetchImpl = dependencies.fetchImpl ?? fetch;
     const requestInit: RequestInit = {
@@ -1357,7 +1344,7 @@ export async function fetchGrokPayload(dependencies: GrokUsageDependencies = {})
 
 export async function renderGrokPayload(
     dependencies: GrokUsageDependencies = {},
-): Promise<WaybarPayload> {
+): Promise<BarPayload> {
     try {
         return await fetchGrokPayload(dependencies);
     } catch (err) {
@@ -1531,7 +1518,7 @@ async function readClaudeErrorMessage(response: Response): Promise<string | null
     }
 }
 
-async function fetchClaudePayload(): Promise<WaybarPayload> {
+async function fetchClaudePayload(): Promise<BarPayload> {
     const activeBackoff = await loadClaudeBackoff();
     if (activeBackoff) {
         const cached = await fallbackToCachedClaudePayload(
@@ -1643,7 +1630,7 @@ async function fetchClaudePayload(): Promise<WaybarPayload> {
     return payload;
 }
 
-function errorPayload(message: string, authenticationRequired = false): WaybarPayload {
+function errorPayload(message: string, authenticationRequired = false): BarPayload {
     return stampPayload({
         text: "⚠ cdx",
         tooltip: message,
@@ -1673,7 +1660,7 @@ export function providerAuthenticationRequired(provider: Provider, message: stri
     return false;
 }
 
-export function weeklyPacePercentagePoints(provider: Provider, payload: WaybarPayload): number | null {
+export function weeklyPacePercentagePoints(provider: Provider, payload: BarPayload): number | null {
     const weeklyLabel = provider == GROK_PROVIDER ? "GrokBot (Weekly)" : "Weekly";
     const weekly = payload.usageRows?.find((row) => row.label == weeklyLabel);
     if (!weekly?.pacing) {
@@ -1682,7 +1669,7 @@ export function weeklyPacePercentagePoints(provider: Provider, payload: WaybarPa
     return Math.round(weekly.pacing.expectedPercentage - weekly.percentage);
 }
 
-async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
+async function renderClaudex(provider: Provider): Promise<BarPayload> {
     if (provider == CLAUDE_PROVIDER) {
         try {
             return await fetchClaudePayload();
@@ -1722,7 +1709,7 @@ async function renderClaudex(provider: Provider): Promise<WaybarPayload> {
     }
 }
 
-async function renderProviderPayload(provider: Provider): Promise<WaybarPayload> {
+async function renderProviderPayload(provider: Provider): Promise<BarPayload> {
     const cached = await loadFreshRenderCache(provider);
     if (cached) {
         return cached;
@@ -1733,11 +1720,11 @@ async function renderProviderPayload(provider: Provider): Promise<WaybarPayload>
 }
 
 export async function renderAllProviders(
-    render: (provider: Provider) => Promise<WaybarPayload> = renderProviderPayload,
+    render: (provider: Provider) => Promise<BarPayload> = renderProviderPayload,
 ): Promise<AllProvidersPayload> {
     const order: Provider[] = [CLAUDE_PROVIDER, CODEX_PROVIDER, GROK_PROVIDER];
     const providers = await Promise.all(order.map(async (provider) => {
-        let payload: WaybarPayload;
+        let payload: BarPayload;
         try {
             payload = await render(provider);
         } catch (err) {
@@ -1792,7 +1779,6 @@ async function main(): Promise<void> {
         if (!args.provider) {
             console.log(next);
             await primeRenderCache(next);
-            await refreshWaybar();
             return;
         }
     }
@@ -1802,7 +1788,6 @@ async function main(): Promise<void> {
         if (!args.toggleProvider) {
             console.log(args.provider);
             await primeRenderCache(args.provider);
-            await refreshWaybar();
             return;
         }
     }

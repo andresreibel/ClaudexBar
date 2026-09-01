@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${CLAUDEXBAR_REPO_DIR:-$SCRIPT_DIR}"
 INSTALL_BASHRC=0
-INSTALL_WAYBAR=0
 FORCE_BASHRC=0
 OS_NAME="$(uname -s)"
 
@@ -17,10 +16,8 @@ Usage:
 
 Options:
   macOS automatically builds and installs /Applications/ClaudexBar.app.
-  Linux always installs the shared CLI and GTK dashboard; these options add integrations:
+  Linux always installs the shared CLI and GTK dashboard; these options add shell helpers:
   --bashrc        Install ~/.bashrc.d/claudexbar helper functions
-  --waybar        Install/patch Waybar module + style
-  --all           Equivalent to: --bashrc --waybar
   --source <dir>  Source repo directory (default: install.sh directory)
   --force-bashrc  Overwrite ~/.bashrc.d/claudexbar if it already exists
   -h, --help      Show this help
@@ -28,8 +25,6 @@ Options:
 Examples:
   ./install.sh             # auto-detect macOS or Linux
   ./install.sh --bashrc
-  ./install.sh --waybar
-  ./install.sh --all
 EOF
 }
 
@@ -67,8 +62,8 @@ resolve_repo_dir() {
 }
 
 install_macos() {
-  if [[ "$INSTALL_BASHRC" -eq 1 || "$INSTALL_WAYBAR" -eq 1 || "$FORCE_BASHRC" -eq 1 ]]; then
-    echo "Linux integration flags (--bashrc, --waybar, --all, --force-bashrc) are not valid on macOS."
+  if [[ "$INSTALL_BASHRC" -eq 1 || "$FORCE_BASHRC" -eq 1 ]]; then
+    echo "Linux integration flags (--bashrc, --force-bashrc) are not valid on macOS."
     exit 1
   fi
 
@@ -138,7 +133,6 @@ cdxmenu() {
     echo "4) provider -> codex"
     echo "5) provider -> grok"
     echo "6) sign in / reconnect grok"
-    echo "7) refresh -> waybar"
     echo "q) quit"
     echo ""
     read -rp "Select: " choice
@@ -149,7 +143,6 @@ cdxmenu() {
       4) claudex --provider codex ;;
       5) claudex --provider grok ;;
       6) claudex --login grok ;;
-      7) pkill -RTMIN+11 waybar 2>/dev/null || true ;;
       q|Q) break ;;
       *) echo "Invalid choice" ;;
     esac
@@ -172,93 +165,11 @@ EOF
   fi
 }
 
-install_waybar_integration() {
-  local config="$HOME/.config/waybar/config.jsonc"
-  local style="$HOME/.config/waybar/style.css"
-
-  if [[ ! -f "$config" ]]; then
-    echo "Skip waybar integration: missing $config"
-    return
-  fi
-
-  backup_if_exists "$config"
-  if [[ -f "$style" ]]; then
-    backup_if_exists "$style"
-  fi
-
-  if ! grep -q '"custom/claudexbar"' "$config"; then
-    local tmp_config
-    tmp_config="$(mktemp)"
-    awk '
-      BEGIN { inserted = 0 }
-      /"modules-right"[[:space:]]*:[[:space:]]*\[/ && inserted == 0 {
-        print
-        print "    \"custom/claudexbar\","
-        inserted = 1
-        next
-      }
-      { print }
-    ' "$config" > "$tmp_config"
-    mv "$tmp_config" "$config"
-
-    tmp_config="$(mktemp)"
-    awk '
-      BEGIN { inserted_block = 0 }
-      /^[[:space:]]*}[[:space:]]*$/ && inserted_block == 0 {
-        print "  ,\"custom/claudexbar\": {"
-        print "    \"exec\": \"~/.bun/bin/bun ~/.local/bin/claudexbar.ts\","
-        print "    \"interval\": 300,"
-        print "    \"return-type\": \"json\","
-        print "    \"tooltip\": true,"
-        print "    \"signal\": 11,"
-        print "    \"on-click\": \"~/.local/bin/claudexbar-dashboard\""
-        print "  }"
-        inserted_block = 1
-      }
-      { print }
-    ' "$config" > "$tmp_config"
-    mv "$tmp_config" "$config"
-  fi
-
-  if [[ -f "$style" ]] && ! grep -q '#custom-claudexbar' "$style"; then
-    cat >> "$style" <<'EOF'
-
-# ClaudexBar
-#custom-claudexbar {
-  margin: 0 7.5px;
-}
-
-#custom-claudexbar.warning {
-  color: #ff9e64;
-}
-
-#custom-claudexbar.critical {
-  color: #f7768e;
-}
-
-#custom-claudexbar.easy {
-  color: #e0af68;
-}
-EOF
-  fi
-
-  pkill -RTMIN+11 waybar 2>/dev/null || true
-  echo "Installed waybar integration"
-}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bashrc)
       INSTALL_BASHRC=1
-      shift
-      ;;
-    --waybar)
-      INSTALL_WAYBAR=1
-      shift
-      ;;
-    --all)
-      INSTALL_BASHRC=1
-      INSTALL_WAYBAR=1
       shift
       ;;
     --source)
@@ -301,8 +212,4 @@ install_script
 
 if [[ "$INSTALL_BASHRC" -eq 1 ]]; then
   install_bashrc_integration
-fi
-
-if [[ "$INSTALL_WAYBAR" -eq 1 ]]; then
-  install_waybar_integration
 fi
