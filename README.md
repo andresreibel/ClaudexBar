@@ -157,7 +157,7 @@ See [architecture](docs/ARCHITECTURE.md), [troubleshooting](docs/TROUBLESHOOTING
 - Claude macOS Keychain discovery: verified.
 - SpaceXAI login and live Cursor-backed Grok weekly usage: verified in the installed macOS app.
 - Claude live usage: account-dependent; the current OAuth endpoint can reject organization-managed accounts.
-- Linux: the Quattro command widget and GTK dashboard use the shared engine; CI validates the engine and installer syntax.
+- Linux: the Quattro command widget and GTK dashboard use the shared engine.
 
 ## License
 

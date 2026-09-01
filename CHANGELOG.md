@@ -21,6 +21,7 @@
 ### Removed
 
 - Removed the unused Waybar installer, runtime signaling, documentation, and legacy screenshots. Linux now supports the Omarchy Quattro command widget and GTK dashboard path only.
+- Removed the GitHub Actions workflow; verification now runs locally before changes are committed.
 
 ## 0.3.0 - 2026-07-11
 
