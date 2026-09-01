@@ -23,7 +23,7 @@ The native macOS dropdown shows OpenAI (Codex), Anthropic (Claude), and SpaceXAI
 - Signed weekly pace is `expected − actual`: negative means quota consumption is ahead of its linear allowance.
 - Disconnected providers show a **Reconnect** button in their dashboard column; the macOS menu-bar summary omits them until they reconnect.
 - OpenAI free reset-credit count in both dashboards and the Linux tooltip.
-- Five-minute refresh, manual refresh, caching, and rate-limit backoff.
+- Five-minute and manual refresh with a one-second minimum loading spinner on both dashboards, plus caching and rate-limit backoff.
 - Subtle per-provider last-updated time in both dashboards and the Linux tooltip.
 - Native macOS launch-at-login control.
 - Native monochrome macOS menu-bar summary.
@@ -111,7 +111,7 @@ Requirements:
 }
 ```
 
-The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Hover for compact details and click to open or close the three-card dashboard. A loading spinner holds the cards back until the aggregate provider payload is ready; the refresh button then updates every provider together. This uses Quattro's built-in command widget—no custom QML or plugin is required.
+The one-second bar interval reads the local render cache; live usage requests remain limited to about once per five minutes. Hover for compact details and click to open or close the three-card dashboard. Initial load and every manual refresh hide the cards behind a spinner for at least one second, then reveal all provider data together. This uses Quattro's built-in command widget—no custom QML or plugin is required.
 
 ### Optional Waybar integration
 

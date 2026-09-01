@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -433,20 +434,28 @@ class DashboardWindow(Gtk.ApplicationWindow):
         self.refreshing = True
         self.refresh_button.set_sensitive(False)
         self.error_label.set_visible(False)
-        if not self.has_payload:
-            self.loading_label.set_label("Loading usage…")
-            self.loading_spinner.start()
-            self.content_stack.set_visible_child_name("loading")
-        threading.Thread(target=self.load_payload, daemon=True).start()
+        self.loading_label.set_label("Loading usage…")
+        self.loading_spinner.start()
+        self.content_stack.set_visible_child_name("loading")
+        started_at = time.monotonic()
+        threading.Thread(target=self.load_payload, args=(started_at,), daemon=True).start()
 
-    def load_payload(self):
+    def load_payload(self, started_at):
         bun = find_bun()
         engine = find_engine()
         if bun is None:
-            GLib.idle_add(self.finish_error, "Bun was not found. Set CLAUDEXBAR_BUN or install Bun.")
+            self.finish_after_minimum_delay(
+                started_at,
+                self.finish_error,
+                "Bun was not found. Set CLAUDEXBAR_BUN or install Bun.",
+            )
             return
         if engine is None:
-            GLib.idle_add(self.finish_error, "claudexbar.ts was not found beside the dashboard.")
+            self.finish_after_minimum_delay(
+                started_at,
+                self.finish_error,
+                "claudexbar.ts was not found beside the dashboard.",
+            )
             return
         try:
             result = subprocess.run(
@@ -460,9 +469,16 @@ class DashboardWindow(Gtk.ApplicationWindow):
             providers = aggregate.get("providers")
             if not isinstance(providers, list):
                 raise ValueError("aggregate payload has no providers list")
-            GLib.idle_add(self.finish_refresh, providers)
+            self.finish_after_minimum_delay(started_at, self.finish_refresh, providers)
         except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError) as error:
-            GLib.idle_add(self.finish_error, f"Refresh failed: {error}")
+            self.finish_after_minimum_delay(started_at, self.finish_error, f"Refresh failed: {error}")
+
+    @staticmethod
+    def finish_after_minimum_delay(started_at, callback, value):
+        remaining = 1 - (time.monotonic() - started_at)
+        if remaining > 0:
+            time.sleep(remaining)
+        GLib.idle_add(callback, value)
 
     def finish_refresh(self, providers):
         entries = {entry.get("provider"): entry for entry in providers if isinstance(entry, dict)}
@@ -478,8 +494,10 @@ class DashboardWindow(Gtk.ApplicationWindow):
     def finish_error(self, message):
         self.error_label.set_label(message)
         self.error_label.set_visible(True)
-        if not self.has_payload:
-            self.loading_spinner.stop()
+        self.loading_spinner.stop()
+        if self.has_payload:
+            self.content_stack.set_visible_child_name("cards")
+        else:
             self.loading_label.set_label("Usage unavailable")
         self.refreshing = False
         self.refresh_button.set_sensitive(True)

@@ -158,6 +158,7 @@ private final class ClaudexBarModel: ObservableObject {
     @Published var aggregate: ClaudexBarAggregatePayload?
     @Published var errorMessage: String?
     @Published var isRefreshing = false
+    @Published var hasLoaded = false
 
     private var timer: Timer?
 
@@ -189,8 +190,8 @@ private final class ClaudexBarModel: ObservableObject {
 
     func refresh() async {
         guard !isRefreshing else { return }
+        let startedAt = DispatchTime.now().uptimeNanoseconds
         isRefreshing = true
-        defer { isRefreshing = false }
 
         do {
             let runner = try EngineRunner.resolve()
@@ -199,13 +200,17 @@ private final class ClaudexBarModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        await waitForMinimumSpinner(since: startedAt)
+        isRefreshing = false
+        hasLoaded = true
     }
 
     func reconnect(_ provider: ClaudexBarProvider) async {
         guard !isRefreshing else { return }
+        let startedAt = DispatchTime.now().uptimeNanoseconds
         isRefreshing = true
         errorMessage = nil
-        defer { isRefreshing = false }
 
         do {
             let runner = try EngineRunner.resolve()
@@ -213,6 +218,18 @@ private final class ClaudexBarModel: ObservableObject {
             aggregate = try await runner.payloads()
         } catch {
             errorMessage = error.localizedDescription
+        }
+
+        await waitForMinimumSpinner(since: startedAt)
+        isRefreshing = false
+        hasLoaded = true
+    }
+
+    private func waitForMinimumSpinner(since startedAt: UInt64) async {
+        let minimumDuration: UInt64 = 1_000_000_000
+        let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
+        if elapsed < minimumDuration {
+            try? await Task.sleep(nanoseconds: minimumDuration - elapsed)
         }
     }
 }
@@ -242,9 +259,25 @@ private struct ClaudexBarMenu: View {
                 .help("Refresh all providers")
             }
 
-            HStack(alignment: .top, spacing: 12) {
-                ForEach(ClaudexBarProvider.dashboardOrder, id: \.rawValue) { provider in
-                    providerColumn(provider)
+            Group {
+                if model.isRefreshing || !model.hasLoaded {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.regular)
+                        Text("Loading usage…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if model.aggregate != nil {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(ClaudexBarProvider.dashboardOrder, id: \.rawValue) { provider in
+                            providerColumn(provider)
+                        }
+                    }
+                } else {
+                    Text("Usage unavailable")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
