@@ -8,6 +8,7 @@
 - Structured progress and reset rows in the macOS dropdown for every available OpenAI, Anthropic, and SpaceXAI quota window, with compact menu-bar summaries unchanged.
 - Paired actual and expected progress bars across OpenAI, Anthropic, Cursor monthly, and GrokBot weekly quota windows.
 - GTK 4 Linux dashboard matching the macOS three-card layout, with aggregate provider refresh, reconnect actions, Quattro command-widget integration, and optional Wayland layer-shell placement.
+- OpenAI reset-credit expiry dates on hover or click of the Reset credits row in the macOS dropdown, sourced through the supported local Codex app-server.
 
 ### Fixed
 

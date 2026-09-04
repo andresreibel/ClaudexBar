@@ -22,7 +22,7 @@ The native macOS dropdown shows OpenAI (Codex), Anthropic (Claude), and SpaceXAI
 - Paired actual and expected progress bars with reset countdowns for session and weekly windows; SpaceXAI shows Cursor Models (Monthly), Other Models (Monthly), and GrokBot (Weekly).
 - Signed weekly pace is `expected − actual`: negative means quota consumption is ahead of its linear allowance.
 - Disconnected providers show a **Reconnect** button in their dashboard column; the macOS menu-bar summary omits them until they reconnect.
-- OpenAI free reset-credit count in both dashboards and the Linux tooltip.
+- OpenAI reset-credit count in both dashboards, with each available credit's expiry shown by hovering over or clicking the macOS Reset credits row.
 - Five-minute and manual refresh with a one-second minimum loading spinner on both dashboards, plus caching and rate-limit backoff.
 - Subtle per-provider last-updated time in both dashboards and the Linux tooltip.
 - Native macOS launch-at-login control.
@@ -45,7 +45,7 @@ A -1%  O +4%  S +39%
 | Positive pace | Actual consumption is below the linear allowance |
 | `--` | Weekly pace is unavailable for that provider |
 
-The macOS popover and Linux dashboard both show all three providers in fixed Anthropic, OpenAI, SpaceXAI order. Each compact column retains the provider's available session, weekly, monthly, reset-credit, authentication, and refresh details. Actual and expected bars remain separate so the signed pace can be checked visually.
+The macOS popover and Linux dashboard both show all three providers in fixed Anthropic, OpenAI, SpaceXAI order. Each compact column retains the provider's available session, weekly, monthly, reset-credit, authentication, and refresh details. On macOS, click the OpenAI Reset credits row to expand each available credit and its expiry; hover shows the same list. Actual and expected bars remain separate so the signed pace can be checked visually.
 
 Linux retains its compact selectable bar display:
 

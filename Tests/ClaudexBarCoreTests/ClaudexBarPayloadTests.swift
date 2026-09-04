@@ -3,14 +3,17 @@ import Testing
 @testable import ClaudexBarCore
 
 @Test func decodesBarPayloadStringClass() throws {
-    let data = Data(#"{"text":"O(1) → 42%","tooltip":"Codex","class":"warning provider-codex","percentage":12,"percentageLabel":"Session","resetCredits":1,"updatedAt":"2026-07-11T08:10:00.000Z"}"#.utf8)
+    let data = Data(#"{"text":"O(2) → 42%","tooltip":"Codex","class":"warning provider-codex","percentage":12,"percentageLabel":"Session","resetCredits":2,"resetCreditDetails":[{"title":"Full reset","expiresAt":1800000000},{"title":"Full reset","expiresAt":1900000000}],"updatedAt":"2026-07-11T08:10:00.000Z"}"#.utf8)
     let payload = try JSONDecoder().decode(ClaudexBarPayload.self, from: data)
 
-    #expect(payload.text == "O(1) → 42%")
+    #expect(payload.text == "O(2) → 42%")
     #expect(payload.classes == ["warning", "provider-codex"])
     #expect(payload.percentage == 12)
     #expect(payload.percentageLabel == "Session")
-    #expect(payload.resetCredits == 1)
+    #expect(payload.resetCredits == 2)
+    #expect(payload.resetCreditDetails.map(\.title) == ["Full reset", "Full reset"])
+    #expect(payload.resetCreditDetails.map(\.expiresAt) == [1_800_000_000, 1_900_000_000])
+    #expect(payload.resetCreditDetails[0].displayText.contains("Full reset\nExpires "))
     #expect(payload.updatedAt == "2026-07-11T08:10:00.000Z")
     #expect(payload.updatedTimeText != nil)
     #expect(payload.severity == .warning)
@@ -22,6 +25,7 @@ import Testing
 
     #expect(payload.classes == ["stale", "critical", "provider-claude"])
     #expect(payload.severity == .critical)
+    #expect(payload.resetCreditDetails.isEmpty)
 }
 
 @Test func decodesStructuredUsageRows() throws {

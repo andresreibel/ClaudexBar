@@ -7,13 +7,17 @@ import {
     calcPacing,
     codexUsageToPayload,
     decodeMacOSKeychainSecret,
+    enrichCodexUsageWithResetCredits,
     formatCredits,
     compactLegacyTooltip,
     parseCodexOAuthUsage,
+    parseCodexResetCreditDetails,
     stampPayload,
     fetchGrokPayload,
     grokUsageToPayload,
     loginGrok,
+    isRenderCacheCompatible,
+    normalizeBarPayload,
     nextProvider,
     parseCursorMonthlyUsage,
     parseGrokUsage,
@@ -130,6 +134,108 @@ describe("compactLegacyTooltip", () => {
     });
 });
 
+describe("parseCodexResetCreditDetails", () => {
+    test("sanitizes available credits and sorts known expiries first", () => {
+        expect(parseCodexResetCreditDetails({
+            rateLimitResetCredits: {
+                credits: [
+                    {
+                        id: "private-id",
+                        description: "private-description",
+                        status: "available",
+                        title: "Full reset",
+                        expiresAt: 1_900_000_000,
+                    },
+                    { status: "redeemed", title: "Used reset", expiresAt: 1_700_000_000 },
+                    { status: "available", title: "Full reset", expiresAt: 1_800_000_000 },
+                    { status: "available", title: null, expiresAt: 1_850_000_000 },
+                    { status: "available", title: "Expiry pending", expiresAt: null },
+                ],
+            },
+        })).toEqual([
+            { title: "Full reset", expiresAt: 1_800_000_000 },
+            { title: "Reset credit", expiresAt: 1_850_000_000 },
+            { title: "Full reset", expiresAt: 1_900_000_000 },
+            { title: "Expiry pending", expiresAt: null },
+        ]);
+    });
+});
+
+describe("Codex reset-credit enrichment", () => {
+    const usage = parseCodexOAuthUsage({
+        rate_limit: {
+            primary_window: {
+                used_percent: 12,
+                limit_window_seconds: 18_000,
+                reset_at: 1_800_000_000,
+            },
+        },
+        rate_limit_reset_credits: { available_count: 2 },
+    });
+
+    test("adds sanitized details without changing OAuth usage", async () => {
+        const enriched = await enrichCodexUsageWithResetCredits(usage, Promise.resolve({
+            rateLimitResetCredits: {
+                credits: [
+                    { status: "available", title: "Full reset", expiresAt: 1_800_000_000 },
+                ],
+            },
+        }));
+
+        expect(enriched).toEqual({
+            ...usage,
+            resetCreditDetails: [{ title: "Full reset", expiresAt: 1_800_000_000 }],
+        });
+    });
+
+    test("preserves OAuth usage with an empty detail list when RPC fails", async () => {
+        const enriched = await enrichCodexUsageWithResetCredits(
+            usage,
+            Promise.reject(new Error("RPC unavailable")),
+        );
+
+        expect(enriched).toEqual({ ...usage, resetCreditDetails: [] });
+        expect(enriched.resetCredits).toBe(2);
+    });
+});
+
+describe("Codex render-cache compatibility", () => {
+    const payload = { text: "O", tooltip: "Codex" };
+
+    test("refreshes a legacy successful Codex cache without credit details", () => {
+        expect(isRenderCacheCompatible("codex", payload)).toBe(false);
+        expect(isRenderCacheCompatible("codex", { ...payload, resetCreditDetails: [] })).toBe(true);
+        expect(isRenderCacheCompatible("codex", { ...payload, class: "error" })).toBe(true);
+        expect(isRenderCacheCompatible("claude", payload)).toBe(true);
+    });
+
+    test("strips private and obsolete nested fields while normalizing cache data", () => {
+        const normalized = normalizeBarPayload({
+            ...payload,
+            resetCreditDetails: [{
+                id: "private-id",
+                title: " Full reset ",
+                expiresAt: 1_800_000_000,
+                description: "private-description",
+            }],
+            usageRows: [{
+                label: "Weekly",
+                percentage: 10,
+                resetText: "2d",
+                resetAt: 1_800_000_000,
+                severity: "normal",
+            }],
+        });
+
+        expect(normalized?.resetCreditDetails).toEqual([
+            { title: "Full reset", expiresAt: 1_800_000_000 },
+        ]);
+        expect(normalized?.usageRows).toEqual([
+            { label: "Weekly", percentage: 10, resetText: "2d", severity: "normal" },
+        ]);
+    });
+});
+
 describe("codexUsageToPayload", () => {
     test("stamps the live Codex payload used by macOS and Linux", () => {
         const payload = codexUsageToPayload({
@@ -141,6 +247,7 @@ describe("codexUsageToPayload", () => {
             weeklyWindowMinutes: null,
             credits: null,
             resetCredits: 1,
+            resetCreditDetails: [{ title: "Full reset", expiresAt: 1_800_000_000 }],
             source: "oauth",
             planType: "plus",
         });
@@ -150,6 +257,9 @@ describe("codexUsageToPayload", () => {
         expect(payload.usageRows).toMatchObject([
             { label: "Session", percentage: 3, resetText: "n/a", severity: "critical" },
             { label: "Weekly", percentage: 4, resetText: "n/a", severity: "critical" },
+        ]);
+        expect(payload.resetCreditDetails).toEqual([
+            { title: "Full reset", expiresAt: 1_800_000_000 },
         ]);
     });
 

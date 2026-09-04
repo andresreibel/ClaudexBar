@@ -236,6 +236,7 @@ private final class ClaudexBarModel: ObservableObject {
 
 private struct ClaudexBarMenu: View {
     @ObservedObject var model: ClaudexBarModel
+    @State private var showsResetCreditExpiries = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -351,14 +352,48 @@ private struct ClaudexBarMenu: View {
                 }
 
                 if let credits = payload.resetCredits {
-                    HStack {
-                        Text("Reset credits")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(credits.formatted(.number.precision(.fractionLength(0...2))))
-                            .font(.system(.caption, design: .monospaced, weight: .semibold))
+                    Button {
+                        if !payload.resetCreditDetails.isEmpty {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                showsResetCreditExpiries.toggle()
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text("Reset credits")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(credits.formatted(.number.precision(.fractionLength(0...2))))
+                                .font(.system(.caption, design: .monospaced, weight: .semibold))
+                            if !payload.resetCreditDetails.isEmpty {
+                                Image(systemName: showsResetCreditExpiries ? "chevron.up" : "chevron.down")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .font(.caption2)
+                    .help(
+                        payload.resetCreditDetails.isEmpty
+                            ? "Expiry details unavailable"
+                            : payload.resetCreditDetails.map(\.displayText).joined(separator: "\n\n")
+                    )
+
+                    if showsResetCreditExpiries {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(payload.resetCreditDetails.enumerated()), id: \.offset) { _, credit in
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(credit.title)
+                                        .fontWeight(.semibold)
+                                    Text(credit.expiryText)
+                                }
+                            }
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 4)
+                    }
                 }
 
                 let detail = payload.macOSDetail

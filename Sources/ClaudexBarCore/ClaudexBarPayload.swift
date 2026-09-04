@@ -44,6 +44,23 @@ public struct ClaudexBarUsageRow: Decodable, Equatable, Sendable {
     public let pacing: ClaudexBarUsagePacing?
 }
 
+public struct ClaudexBarResetCredit: Decodable, Equatable, Sendable {
+    public let title: String
+    public let expiresAt: Double?
+
+    public var expiryText: String {
+        guard let expiresAt, expiresAt.isFinite else { return "Expiry unavailable" }
+        let expiry = Date(timeIntervalSince1970: expiresAt)
+            .formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        return "Expires \(expiry)"
+    }
+
+    public var displayText: String {
+        "\(title)\n\(expiryText)"
+    }
+}
+
+
 public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let text: String
     public let tooltip: String
@@ -51,6 +68,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
     public let percentage: Double?
     public let percentageLabel: String?
     public let resetCredits: Double?
+    public let resetCreditDetails: [ClaudexBarResetCredit]
     public let updatedAt: String?
     public let authenticationRequired: Bool?
     public let usageRows: [ClaudexBarUsageRow]
@@ -62,6 +80,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         case percentage
         case percentageLabel
         case resetCredits
+        case resetCreditDetails
         case updatedAt
         case authenticationRequired
         case usageRows
@@ -74,6 +93,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         percentage: Double? = nil,
         percentageLabel: String? = nil,
         resetCredits: Double? = nil,
+        resetCreditDetails: [ClaudexBarResetCredit] = [],
         updatedAt: String? = nil,
         authenticationRequired: Bool? = nil,
         usageRows: [ClaudexBarUsageRow] = []
@@ -84,6 +104,7 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         self.percentage = percentage
         self.percentageLabel = percentageLabel
         self.resetCredits = resetCredits
+        self.resetCreditDetails = resetCreditDetails
         self.updatedAt = updatedAt
         self.authenticationRequired = authenticationRequired
         self.usageRows = usageRows
@@ -96,6 +117,10 @@ public struct ClaudexBarPayload: Decodable, Equatable, Sendable {
         percentage = try container.decodeIfPresent(Double.self, forKey: .percentage)
         percentageLabel = try container.decodeIfPresent(String.self, forKey: .percentageLabel)
         resetCredits = try container.decodeIfPresent(Double.self, forKey: .resetCredits)
+        resetCreditDetails = try container.decodeIfPresent(
+            [ClaudexBarResetCredit].self,
+            forKey: .resetCreditDetails
+        ) ?? []
         updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
         authenticationRequired = try container.decodeIfPresent(Bool.self, forKey: .authenticationRequired)
         usageRows = try container.decodeIfPresent([ClaudexBarUsageRow].self, forKey: .usageRows) ?? []

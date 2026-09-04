@@ -71,6 +71,11 @@ type UsageRow = {
     pacing?: UsageRowPacing;
 };
 
+export type ResetCreditDetail = {
+    title: string;
+    expiresAt: number | null;
+};
+
 type BarPayload = {
     text: string;
     tooltip: string;
@@ -78,6 +83,7 @@ type BarPayload = {
     percentage?: number;
     percentageLabel?: string;
     resetCredits?: number;
+    resetCreditDetails?: ResetCreditDetail[];
     updatedAt?: string;
     authenticationRequired?: boolean;
     usageRows?: UsageRow[];
@@ -123,6 +129,7 @@ export type CodexUsageSnapshot = {
     weeklyWindowMinutes: number | null;
     credits: number | null;
     resetCredits: number | null;
+    resetCreditDetails?: ResetCreditDetail[];
     source: "oauth" | "rpc";
     planType: string | null;
 };
@@ -292,7 +299,7 @@ async function writeJsonFile(path: string, value: unknown): Promise<void> {
     await writeFile(path, JSON.stringify(value, null, 2), "utf8");
 }
 
-function normalizeBarPayload(value: unknown): BarPayload | null {
+export function normalizeBarPayload(value: unknown): BarPayload | null {
     if (!isRecord(value)) {
         return null;
     }
@@ -313,6 +320,21 @@ function normalizeBarPayload(value: unknown): BarPayload | null {
     const percentage = toNumber(value.percentage) ?? undefined;
     const percentageLabel = toStringValue(value.percentageLabel) ?? undefined;
     const resetCredits = toNumber(value.resetCredits) ?? undefined;
+    const resetCreditDetails = Array.isArray(value.resetCreditDetails)
+        && value.resetCreditDetails.every((credit) => isRecord(credit)
+            && typeof credit.title == "string" && credit.title.trim().length > 0
+            && (credit.expiresAt == null
+                || (typeof credit.expiresAt == "number"
+                    && Number.isFinite(credit.expiresAt)
+                    && credit.expiresAt > 0)))
+        ? value.resetCreditDetails.map((credit) => {
+            const source = credit as JSONRecord;
+            return {
+                title: (source.title as string).trim(),
+                expiresAt: source.expiresAt == null ? null : source.expiresAt as number,
+            };
+        })
+        : undefined;
     const updatedAt = toStringValue(value.updatedAt) ?? undefined;
     const usageRows = Array.isArray(value.usageRows)
         && value.usageRows.every((row) => isRecord(row)
@@ -325,7 +347,19 @@ function normalizeBarPayload(value: unknown): BarPayload | null {
                 && typeof row.pacing.expectedPercentage == "number"
                 && Number.isFinite(row.pacing.expectedPercentage)
                 && row.pacing.expectedPercentage >= 0 && row.pacing.expectedPercentage <= 100)))
-        ? value.usageRows as UsageRow[]
+        ? value.usageRows.map((row) => {
+            const source = row as JSONRecord;
+            const pacing = isRecord(source.pacing)
+                ? { expectedPercentage: source.pacing.expectedPercentage as number }
+                : undefined;
+            return {
+                label: source.label as string,
+                percentage: source.percentage as number,
+                resetText: source.resetText as string,
+                severity: source.severity as UsageRow["severity"],
+                pacing,
+            };
+        })
         : undefined;
     const authenticationRequired = typeof value.authenticationRequired == "boolean"
         ? value.authenticationRequired
@@ -337,6 +371,7 @@ function normalizeBarPayload(value: unknown): BarPayload | null {
         percentage,
         percentageLabel,
         resetCredits,
+        resetCreditDetails,
         usageRows,
         updatedAt,
         authenticationRequired,
@@ -346,6 +381,12 @@ function normalizeBarPayload(value: unknown): BarPayload | null {
 function isErrorPayload(payload: BarPayload): boolean {
     const klass = payload.class;
     return klass == "error" || (Array.isArray(klass) && klass.includes("error"));
+}
+
+export function isRenderCacheCompatible(provider: Provider, payload: BarPayload): boolean {
+    return provider != CODEX_PROVIDER
+        || isErrorPayload(payload)
+        || payload.resetCreditDetails != null;
 }
 
 export function stripLegacyBarCountdown(text: string): string {
@@ -372,7 +413,7 @@ async function loadFreshRenderCache(provider: Provider): Promise<BarPayload | nu
     }
     const savedAtMs = toNumber(parsed.savedAtMs);
     const payload = normalizeBarPayload(parsed.payload);
-    if (savedAtMs == null || !payload) {
+    if (savedAtMs == null || !payload || !isRenderCacheCompatible(provider, payload)) {
         return null;
     }
     const ttl = isErrorPayload(payload) ? RENDER_CACHE_ERROR_TTL_MS : RENDER_CACHE_TTL_MS;
@@ -866,13 +907,13 @@ async function fetchCodexUsageViaOAuth(): Promise<CodexUsageSnapshot> {
         throw new Error(`OAuth API ${response.status}`);
     }
 
-    const body = await response.json();
-    return parseCodexOAuthUsage(body);
+    const usage = parseCodexOAuthUsage(await response.json());
+    return enrichCodexUsageWithResetCredits(usage, fetchCodexRateLimitsViaRpc());
 }
 
-async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
-    const rateLimitResult = await new Promise<JSONRecord>((resolve, reject) => {
-        const child = spawn("codex", ["-s", "read-only", "-a", "untrusted", "app-server"], {
+async function fetchCodexRateLimitsViaRpc(): Promise<JSONRecord> {
+    return new Promise<JSONRecord>((resolve, reject) => {
+        const child = spawn("codex", ["-s", "read-only", "-a", "never", "app-server"], {
             stdio: ["pipe", "pipe", "pipe"],
         });
 
@@ -932,7 +973,7 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
             if (id == 1) {
                 send({ method: "initialized", params: {} });
                 send({ id: 2, method: "account/read", params: { includeApiKey: false } });
-                send({ id: 3, method: "account/rateLimits/read", params: null });
+                send({ id: 3, method: "account/rateLimits/read" });
                 return;
             }
 
@@ -977,7 +1018,51 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
 
         send({ id: 1, method: "initialize", params: { clientInfo: { name: "claudexbar", version: "0.2.0" } } });
     });
+}
 
+export function parseCodexResetCreditDetails(raw: unknown): ResetCreditDetail[] {
+    if (!isRecord(raw)) {
+        return [];
+    }
+    const resetCreditsNode = readNestedRecord(raw, "rateLimitResetCredits") ?? raw;
+    const credits = Array.isArray(resetCreditsNode.credits) ? resetCreditsNode.credits : [];
+
+    return credits.flatMap((credit): ResetCreditDetail[] => {
+        if (!isRecord(credit) || credit.status != "available") {
+            return [];
+        }
+        const expiresAt = toNumber(credit.expiresAt);
+        return [{
+            title: toStringValue(credit.title)?.trim() || "Reset credit",
+            expiresAt: expiresAt != null && expiresAt > 0 ? Math.round(expiresAt) : null,
+        }];
+    }).sort((left, right) => {
+        if (left.expiresAt == null) {
+            return right.expiresAt == null ? 0 : 1;
+        }
+        return right.expiresAt == null ? -1 : left.expiresAt - right.expiresAt;
+    });
+}
+
+export async function enrichCodexUsageWithResetCredits(
+    usage: CodexUsageSnapshot,
+    rateLimitResult: Promise<unknown>,
+): Promise<CodexUsageSnapshot> {
+    try {
+        return {
+            ...usage,
+            resetCreditDetails: parseCodexResetCreditDetails(await rateLimitResult),
+        };
+    } catch {
+        return {
+            ...usage,
+            resetCreditDetails: [],
+        };
+    }
+}
+
+async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
+    const rateLimitResult = await fetchCodexRateLimitsViaRpc();
     const rateLimitsById = readNestedRecord(rateLimitResult, "rateLimitsByLimitId");
     const codexLimit = rateLimitsById ? readNestedRecord(rateLimitsById, "codex") : null;
     const rateLimits = codexLimit ?? readNestedRecord(rateLimitResult, "rateLimits");
@@ -1011,6 +1096,7 @@ async function fetchCodexUsageViaRpc(): Promise<CodexUsageSnapshot> {
         weeklyWindowMinutes: toNumber(weekly?.windowDurationMins),
         credits: toNumber(creditsNode?.balance),
         resetCredits: toNumber(resetCreditsNode?.availableCount),
+        resetCreditDetails: parseCodexResetCreditDetails(rateLimitResult),
         source: "rpc",
         planType: toStringValue(rateLimits.planType),
     };
@@ -1095,6 +1181,7 @@ export function codexUsageToPayload(usage: CodexUsageSnapshot): BarPayload {
         percentage: usage.sessionPct ?? usage.weeklyPct ?? undefined,
         percentageLabel: usage.sessionPct == null ? "Weekly" : "Session",
         resetCredits: usage.resetCredits ?? undefined,
+        resetCreditDetails: usage.resetCreditDetails ?? [],
         usageRows,
     });
 }
