@@ -9,6 +9,7 @@
 - Paired actual and expected progress bars across OpenAI, Anthropic, Cursor monthly, and GrokBot weekly quota windows.
 - GTK 4 Linux dashboard matching the macOS three-card layout, with aggregate provider refresh, reconnect actions, Quattro command-widget integration, and optional Wayland layer-shell placement.
 - OpenAI reset-credit expiry dates on hover or click of the Reset credits row in the macOS dropdown, sourced through the supported local Codex app-server.
+- Weekly usage threshold colors for the macOS menu-bar provider letters: cosmic orange at 75% and red at 90%, without recoloring signed pace values.
 
 ### Fixed
 

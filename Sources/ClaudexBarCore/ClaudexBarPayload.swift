@@ -207,6 +207,18 @@ public struct ClaudexBarProviderPayload: Decodable, Equatable, Sendable {
         return rounded > 0 ? "+\(rounded)%" : "\(rounded)%"
     }
 
+    public var weeklyUsagePercentage: Double? {
+        let label = provider == .grok ? "GrokBot (Weekly)" : "Weekly"
+        return payload.usageRows.first { $0.label == label }?.percentage
+    }
+
+    public var menuBarBadgeSeverity: ClaudexBarSeverity {
+        guard let weeklyUsagePercentage else { return .normal }
+        if weeklyUsagePercentage >= 90 { return .critical }
+        if weeklyUsagePercentage >= 75 { return .warning }
+        return .normal
+    }
+
     public var menuBarText: String {
         "\(provider.badge) \(paceText)"
     }

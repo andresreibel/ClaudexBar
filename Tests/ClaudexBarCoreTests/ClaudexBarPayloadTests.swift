@@ -72,6 +72,24 @@ import Testing
     #expect(ClaudexBarProvider.dashboardOrder == [.claude, .codex, .grok])
 }
 
+@Test func derivesMenuBarBadgeSeverityFromWeeklyUsage() throws {
+    let data = Data(#"{"providers":[{"provider":"claude","weeklyPace":1,"payload":{"text":"A","tooltip":"Claude","usageRows":[{"label":"Weekly","percentage":74.99,"resetText":"1d","severity":"normal"}]}},{"provider":"codex","weeklyPace":1,"payload":{"text":"O","tooltip":"Codex","usageRows":[{"label":"Weekly","percentage":75,"resetText":"1d","severity":"normal"}]}},{"provider":"grok","weeklyPace":1,"payload":{"text":"S","tooltip":"SpaceXAI","usageRows":[{"label":"Cursor Models (Monthly)","percentage":99,"resetText":"1d","severity":"critical"},{"label":"GrokBot (Weekly)","percentage":89.99,"resetText":"1d","severity":"normal"}]}}]}"#.utf8)
+    let aggregate = try JSONDecoder().decode(ClaudexBarAggregatePayload.self, from: data)
+
+    #expect(aggregate.payload(for: .claude)?.menuBarBadgeSeverity == .normal)
+    #expect(aggregate.payload(for: .codex)?.menuBarBadgeSeverity == .warning)
+    #expect(aggregate.payload(for: .grok)?.weeklyUsagePercentage == 89.99)
+    #expect(aggregate.payload(for: .grok)?.menuBarBadgeSeverity == .warning)
+}
+
+@Test func makesMenuBarBadgeCriticalAtNinetyPercent() throws {
+    let data = Data(#"{"providers":[{"provider":"claude","weeklyPace":1,"payload":{"text":"A","tooltip":"Claude"}},{"provider":"codex","weeklyPace":1,"payload":{"text":"O","tooltip":"Codex","usageRows":[{"label":"Weekly","percentage":90,"resetText":"1d","severity":"normal"}]}}]}"#.utf8)
+    let aggregate = try JSONDecoder().decode(ClaudexBarAggregatePayload.self, from: data)
+
+    #expect(aggregate.payload(for: .claude)?.menuBarBadgeSeverity == .normal)
+    #expect(aggregate.payload(for: .codex)?.menuBarBadgeSeverity == .critical)
+}
+
 @Test func decodesCombinedProviderPaceForMenuBar() throws {
     let data = Data(#"{"providers":[{"provider":"grok","weeklyPace":39,"payload":{"text":"X","tooltip":"Grok"}},{"provider":"claude","weeklyPace":-1,"payload":{"text":"A","tooltip":"Claude"}},{"provider":"codex","weeklyPace":4,"payload":{"text":"O","tooltip":"Codex"}}]}"#.utf8)
     let aggregate = try JSONDecoder().decode(ClaudexBarAggregatePayload.self, from: data)

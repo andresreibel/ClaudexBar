@@ -26,7 +26,7 @@ The native macOS dropdown shows OpenAI (Codex), Anthropic (Claude), and SpaceXAI
 - Five-minute and manual refresh with a one-second minimum loading spinner on both dashboards, plus caching and rate-limit backoff.
 - Subtle per-provider last-updated time in both dashboards and the Linux tooltip.
 - Native macOS launch-at-login control.
-- Native monochrome macOS menu-bar summary.
+- Native macOS menu-bar summary with provider-letter warning colors tied to the percentage of each weekly limit already used.
 - Automatic macOS/Linux installer routing.
 
 ## Display
@@ -44,6 +44,8 @@ A -1%  O +4%  S +39%
 | Negative pace | Actual consumption is ahead of the linear allowance |
 | Positive pace | Actual consumption is below the linear allowance |
 | `--` | Weekly pace is unavailable for that provider |
+
+Only the provider letter changes color based on the percentage of that provider's weekly limit already used: native label color below 75%, cosmic orange from 75% up to but not including 90%, and red at 90% or more. `S` uses the GrokBot Weekly limit, not either monthly Cursor bucket. The signed pace percentage keeps the native label color.
 
 The macOS popover and Linux dashboard both show all three providers in fixed Anthropic, OpenAI, SpaceXAI order. Each compact column retains the provider's available session, weekly, monthly, reset-credit, authentication, and refresh details. On macOS, click the OpenAI Reset credits row to expand each available credit and its expiry; hover shows the same list. Actual and expected bars remain separate so the signed pace can be checked visually.
 

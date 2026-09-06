@@ -576,13 +576,41 @@ private final class ClaudexBarAppDelegate: NSObject, NSApplicationDelegate, NSPo
         guard !popover.isShown else { return }
         let title = aggregate?.menuBarText ?? lastStatusTitle
         let baseFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        button.attributedTitle = NSAttributedString(
+        let attributedTitle = NSMutableAttributedString(
             string: title,
             attributes: [
                 .foregroundColor: NSColor.labelColor,
                 .font: baseFont,
             ]
         )
+        if let aggregate {
+            let connected = ClaudexBarProvider.dashboardOrder.compactMap { provider -> ClaudexBarProviderPayload? in
+                guard let entry = aggregate.payload(for: provider), entry.isConnected else { return nil }
+                return entry
+            }
+            var location = 0
+            for (index, entry) in connected.enumerated() {
+                if index > 0 {
+                    location += 2
+                }
+                let badgeColor: NSColor
+                switch entry.menuBarBadgeSeverity {
+                case .warning:
+                    badgeColor = NSColor(cosmicOrange)
+                case .critical:
+                    badgeColor = .red
+                case .normal, .stale, .error:
+                    badgeColor = .labelColor
+                }
+                attributedTitle.addAttribute(
+                    .foregroundColor,
+                    value: badgeColor,
+                    range: NSRange(location: location, length: 1)
+                )
+                location += (entry.menuBarText as NSString).length
+            }
+        }
+        button.attributedTitle = attributedTitle
         button.toolTip = model.statusTooltip
         button.setAccessibilityLabel("ClaudexBar, \(title)")
     }
